@@ -1,0 +1,20 @@
+# Audios con derechos de autor: no se suben (ver data/canciones/LEEME.md)
+data/canciones/*
+!data/canciones/LEEME.md
+data/grabaciones/
+
+# Ritmos sintéticos: se generan con "python main.py sinteticos"
+data/sinteticos/*.wav
+
+# Cachés y archivos temporales
+results/*.npz
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
