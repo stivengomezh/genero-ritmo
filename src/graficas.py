@@ -248,6 +248,7 @@ def graficar_mapa_caracteristicas(datos, clases, nombre_archivo="mapa_caracteris
     ax.set_xlabel(f"Componente principal 1 ({var[0]:.0%} de la varianza)")
     ax.set_ylabel(f"Componente principal 2 ({var[1]:.0%} de la varianza)")
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9.5)
-    ax.set_title("Cada punto es un fragmento de 10 s; los géneros con ritmo distinto quedan en zonas distintas")
+    ax.set_title("Cada punto es un fragmento de 10 s. Solo se ven 2 de las 52 dimensiones, por eso los grupos se "
+                 "superponen más que para el clasificador", fontsize=10.5)
     titulo_figura(fig, "Mapa de las características rítmicas (PCA a 2 dimensiones)")
     return terminar(fig, nombre_archivo, mostrar)

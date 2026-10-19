@@ -127,7 +127,7 @@ def crear_parser():
     s.set_defaults(func=cmd_sinteticos)
 
     s = sub.add_parser("analizar", parents=[comun], help="análisis de las señales (Entrega 2)")
-    s.add_argument("--cancion", help="canción para las figuras de detalle (por defecto la primera de salsa)")
+    s.add_argument("--cancion", help="canción para las figuras de detalle (por defecto, la salsa con menos muestras saturadas)")
     s.set_defaults(func=cmd_analizar)
 
     s = sub.add_parser("ritmo", parents=[comun], help="análisis rítmico de un archivo")
