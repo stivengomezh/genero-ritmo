@@ -139,3 +139,16 @@ def fragmentar(y, sr=C.SR, segmento_s=C.SEGMENTO_S, solape=C.SOLAPE):
     if len(y) <= n:
         return [(0.0, y)]
     return [(i / sr, y[i:i + n]) for i in range(0, len(y) - n + 1, paso)]
+
+
+def fragmentos_para_clasificar(y, sr=C.SR, maximo=C.MAX_FRAGMENTOS, recorte_s=C.RECORTE_S):
+    """Fragmentos que se usan para entrenar y evaluar: sin introducción ni final (si la canción
+    es lo bastante larga) y como máximo `maximo`, repartidos uniformemente a lo largo de la canción."""
+    frags = fragmentar(y, sr)
+    dur = len(y) / sr
+    if dur > 2 * recorte_s + 3 * C.SEGMENTO_S:
+        frags = [(ini, f) for ini, f in frags if ini >= recorte_s and ini + C.SEGMENTO_S <= dur - recorte_s]
+    if len(frags) > maximo:
+        idx = np.round(np.linspace(0, len(frags) - 1, maximo)).astype(int)
+        frags = [frags[i] for i in idx]
+    return frags

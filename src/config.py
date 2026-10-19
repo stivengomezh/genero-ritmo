@@ -56,6 +56,11 @@ OCTAVAS_PREFERENCIA = 0.7   # ancho (en octavas) de esa preferencia (desviación
 SEGMENTO_S = 10.0           # cada canción se divide en fragmentos de 10 s ...
 SOLAPE = 0.5                # ... que se solapan el 50 % (avanzan 5 s)
 PASOS_POR_COMPAS = 16       # un compás de 4 tiempos dividido en semicorcheas
+# Para el clasificador, cada canción aporta como máximo MAX_FRAGMENTOS fragmentos repartidos a lo
+# largo de la canción, sin los primeros y últimos RECORTE_S segundos (introducción y final, que
+# suelen no tener la percusión completa). Así una canción de 7 minutos no pesa el triple que una de 2.
+MAX_FRAGMENTOS = 24
+RECORTE_S = 15.0
 
 # ---------------------------------------------------------------- Clasificador
 K_VECINOS = 5               # k-NN: votan los k fragmentos más parecidos

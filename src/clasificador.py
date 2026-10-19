@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 import config as C
-from carga import cargar_audio, fragmentar, listar_canciones, carpeta_por_defecto
+from carga import cargar_audio, fragmentar, fragmentos_para_clasificar, listar_canciones, carpeta_por_defecto
 from caracteristicas import caracteristicas, nombres_caracteristicas
 
 
@@ -40,7 +40,7 @@ def extraer_conjunto(carpeta=None, usar_cache=True):
     cache = C.CARPETA_RESULTADOS / f"caracteristicas_{carpeta.name}.npz"
     # la copia se invalida si cambian los audios o el código que calcula las características
     import hashlib
-    codigo = b"".join((Path(__file__).parent / m).read_bytes() for m in ("config.py", "ritmo.py", "caracteristicas.py"))
+    codigo = b"".join((Path(__file__).parent / m).read_bytes() for m in ("config.py", "carga.py", "ritmo.py", "caracteristicas.py"))
     firma = hashlib.sha1(codigo).hexdigest()[:12] + ";" + ";".join(f"{p.name}:{p.stat().st_size}" for p, _ in canciones)
     if usar_cache and cache.exists():
         d = np.load(cache, allow_pickle=False)
@@ -53,7 +53,7 @@ def extraer_conjunto(carpeta=None, usar_cache=True):
     t0 = time.perf_counter()
     for ruta, genero in canciones:
         y = cargar_audio(ruta)
-        frags = fragmentar(y)
+        frags = fragmentos_para_clasificar(y)
         for inicio, fragmento in frags:
             v, a = caracteristicas(fragmento)
             X.append(v)
