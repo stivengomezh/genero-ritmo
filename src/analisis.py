@@ -19,7 +19,8 @@ import numpy as np
 from scipy import signal
 
 import config as C
-from carga import cargar_original, remuestrear, normalizar, fragmentar, listar_canciones, carpeta_por_defecto
+from carga import (cargar_original, cargar_audio, remuestrear, normalizar, fragmentar, fragmentos_para_clasificar,
+                   listar_canciones, carpeta_por_defecto)
 from ritmo import analizar_ritmo, espectrograma, envolventes, autocorrelacion, estimar_tempo, tramas_a_segundos, pulsos
 from ruido import agregar_ruido
 import graficas as G
@@ -27,12 +28,24 @@ from graficas import plt, AZUL, NARANJA, AGUA, GRIS, SUPERFICIE, TEXTO, TEXTO_2,
 
 
 # ============================================================ Espectro con la FFT
-def espectro(y, fs):
-    """X[k] = FFT{ y[n]·w[n] } con ventana de Hann. Devuelve (f, |X|²) con N/2+1 frecuencias de 0 a fs/2,
-    separadas Δf = fs/N."""
-    N = len(y)
-    X = np.fft.rfft(y * np.hanning(N))
-    return np.fft.rfftfreq(N, 1 / fs), np.abs(X) ** 2
+NFFT_WELCH = 65536   # 1,49 s a 44,1 kHz -> Δf = 44 100 / 65 536 = 0,67 Hz
+
+
+def espectro(y, fs, nfft=NFFT_WELCH):
+    """Densidad espectral de potencia por el método de Welch.
+
+    La señal se divide en bloques de `nfft` muestras con 50 % de solapamiento; a cada bloque se le
+    aplica la ventana de Hann y la FFT, X_m[k] = Σ_n y[n + mH]·w[n]·e^(−j2πkn/nfft), y se promedian
+    los |X_m[k]|². Devuelve (f, P) con nfft/2 + 1 frecuencias de 0 a fs/2 separadas Δf = fs/nfft.
+
+    Promediar muchos bloques reduce la varianza del estimador, y cada FFT es de tamaño fijo: hacer una
+    sola FFT de toda la canción (≈20 millones de muestras) ocupa varios GB de memoria.
+    """
+    y = np.asarray(y, dtype=np.float32)
+    nfft = min(nfft, len(y))
+    f, P = signal.welch(y, fs=fs, window="hann", nperseg=nfft, noverlap=nfft // 2, detrend=False,
+                        scaling="spectrum")
+    return f, P
 
 
 def espectro_tercios(f, P, f_min=20.0, f_max=None):
@@ -49,6 +62,13 @@ def espectro_tercios(f, P, f_min=20.0, f_max=None):
 
 # ============================================================ 3. Caracterización
 def caracterizar(ruta, genero):
+    """Caracteriza una canción y devuelve (fila de la tabla, resumen liviano para las figuras).
+
+    Para no llenar la memoria con canciones completas, aquí solo se guardan datos pequeños: la
+    envolvente de la forma de onda (2 500 puntos), el RMS en ventanas de 100 ms, el espectro en
+    1/6 de octava y el patrón de compás de cada fragmento. Las figuras de detalle vuelven a leer
+    el archivo de la canción elegida (cargar_detalle).
+    """
     x, fs = cargar_original(ruta)
     canales, N = x.shape
     ym = x.mean(axis=0)
@@ -56,27 +76,53 @@ def caracterizar(ruta, genero):
     rms = float(np.sqrt(np.mean(ym ** 2)))
     f, P = espectro(ym, fs)
     Pt = P.sum()
-    y = normalizar(remuestrear(ym, fs, C.SR))
-    analisis = [analizar_ritmo(fr) for _, fr in fragmentar(y)]
-    tempos = np.array([a["tempo"]["bpm"] for a in analisis])
     d = {
         "cancion": Path(ruta).stem, "genero": genero, "formato": Path(ruta).suffix.lstrip(".").upper(),
         "fs_Hz": fs, "Ts_us": 1e6 / fs, "canales": canales, "muestras": N, "duracion_s": N / fs,
-        "muestras_22050": len(y), "minimo": float(ym.min()), "maximo": float(ym.max()), "media": float(ym.mean()),
+        "minimo": float(ym.min()), "maximo": float(ym.max()), "media": float(ym.mean()),
         "rms_dBFS": 20 * np.log10(rms + 1e-12), "cresta_dB": 20 * np.log10(pico / (rms + 1e-12)),
         "saturadas_pct": 100 * float(np.mean(np.abs(x) >= 0.999)),
-        "correlacion_LR": float(np.corrcoef(x[0], x[1])[0, 1]) if canales == 2 else float("nan"),
+        "correlacion_LR": _correlacion(x[0], x[1]) if canales == 2 else float("nan"),
         "energia_bajo_11025Hz_pct": 100 * float(P[f < C.SR / 2].sum() / Pt),
         "energia_graves_pct": 100 * float(P[(f >= 30) & (f < 200)].sum() / Pt),
         "energia_medios_pct": 100 * float(P[(f >= 200) & (f < 2000)].sum() / Pt),
         "energia_agudos_pct": 100 * float(P[(f >= 2000) & (f < 10000)].sum() / Pt),
         "centroide_Hz": float(np.sum(f * P) / Pt),
-        "tempo_BPM": float(np.median(tempos)),
-        "tempo_desv_BPM": float(np.std(tempos)),
-        "claridad_pulso": float(np.median([a["tempo"]["claridad"] for a in analisis])),
-        "fragmentos": len(analisis),
     }
-    return d, {"x": x, "fs": fs, "y": y, "f": f, "P": P, "analisis": analisis}
+    liviano = {"ruta": Path(ruta), "fs": fs, "onda": _envolvente_minmax(ym), "rms": _rms_corto(ym, fs),
+               "espectro": espectro_tercios(f, P, 20, fs / 2)}
+    del x, f, P
+    y = normalizar(remuestrear(ym, fs, C.SR))
+    del ym
+    d["muestras_22050"] = len(y)
+    tempos, claridades, patrones = [], [], []
+    for _, fr in fragmentar(y):
+        a = analizar_ritmo(fr)
+        tempos.append(a["tempo"]["bpm"])
+        claridades.append(a["tempo"]["claridad"])
+        if a["n_compases"] > 0:
+            patrones.append(a["patron"])
+    d.update({"tempo_BPM": float(np.median(tempos)), "tempo_desv_BPM": float(np.std(tempos)),
+              "claridad_pulso": float(np.median(claridades)), "fragmentos": len(tempos)})
+    liviano.update({"tempos": np.array(tempos), "patrones": patrones})
+    return d, liviano
+
+
+def _correlacion(a, b):
+    """Coeficiente de correlación entre los canales izquierdo y derecho (1 = mono, 0 = independientes)."""
+    a = a - a.mean()
+    b = b - b.mean()
+    return float(np.dot(a, b) / (np.sqrt(np.dot(a, a) * np.dot(b, b)) + 1e-12))
+
+
+def cargar_detalle(ruta):
+    """Lo que necesitan las figuras de detalle de UNA canción: la señal original, la señal a 22 050 Hz
+    y el análisis rítmico completo del fragmento central."""
+    x, fs = cargar_original(ruta)
+    y = normalizar(remuestrear(x.mean(axis=0), fs, C.SR))
+    frags = fragmentar(y)
+    inicio, centro = frags[len(frags) // 2]
+    return {"x": x, "fs": fs, "y": y, "inicio_centro": inicio, "centro": centro, "a_centro": analizar_ritmo(centro)}
 
 
 COLUMNAS_TABLA = [
@@ -84,6 +130,7 @@ COLUMNAS_TABLA = [
     ("canales", "Canales", "{}"), ("muestras", "N original", "{:,}"), ("muestras_22050", "N (22 050 Hz)", "{:,}"),
     ("minimo", "Mín", "{:.3f}"), ("maximo", "Máx", "{:.3f}"), ("media", "Media", "{:+.5f}"),
     ("rms_dBFS", "RMS (dBFS)", "{:.1f}"), ("cresta_dB", "Cresta (dB)", "{:.1f}"),
+    ("saturadas_pct", "Saturadas (%)", "{:.3f}"),
     ("energia_bajo_11025Hz_pct", "Energía < 11 kHz (%)", "{:.2f}"), ("energia_graves_pct", "Graves (%)", "{:.0f}"),
     ("energia_medios_pct", "Medios (%)", "{:.0f}"), ("energia_agudos_pct", "Agudos (%)", "{:.1f}"),
     ("tempo_BPM", "Tempo (BPM)", "{:.0f}"), ("claridad_pulso", "Claridad R[P]", "{:.2f}"),
@@ -146,12 +193,12 @@ def figura_formas_de_onda(ejemplos, nombre_archivo="formas_de_onda.png", mostrar
     fig, ejes = plt.subplots(n, 1, figsize=(12, 1.55 * n + 1), constrained_layout=True)
     ejes = np.atleast_1d(ejes)
     for ax, (d, extra) in zip(ejes, ejemplos):
-        ym, fs = extra["x"].mean(axis=0), extra["fs"]
-        mn, mx, idx = _envolvente_minmax(ym)
+        fs = extra["fs"]
+        mn, mx, idx = extra["onda"]
         ax.fill_between(idx / fs, mn, mx, color=G.COLOR_GENERO[d["genero"]], alpha=0.55, linewidth=0)
-        rms, tr = _rms_corto(ym, fs)
+        rms, tr = extra["rms"]
         ax.plot(tr, rms, color=TEXTO_2, linewidth=0.9)
-        ax.set_xlim(0, len(ym) / fs)
+        ax.set_xlim(0, d["duracion_s"])
         ax.set_ylim(-1.1, 1.1)
         ax.set_yticks([-1, 0, 1])
         ax.set_ylabel("x(t)")
@@ -165,10 +212,9 @@ def figura_formas_de_onda(ejemplos, nombre_archivo="formas_de_onda.png", mostrar
 
 def figura_ventanas(d, extra, nombre_archivo="ventana_temporal.png", mostrar=False):
     """(a) 4 s de señal con los ataques detectados y los pulsos; (b) 30 ms con las muestras a 44,1 y 22,05 kHz."""
-    y, fs_o = extra["y"], extra["fs"]
-    a = extra["analisis"][len(extra["analisis"]) // 2]       # un fragmento del centro de la canción
-    frags = fragmentar(y)
-    inicio_frag, frag = frags[len(frags) // 2]
+    fs_o = extra["fs"]
+    a = extra["a_centro"]                       # el fragmento del centro de la canción
+    inicio_frag, frag = extra["inicio_centro"], extra["centro"]
     env = a["envs"]["total"]
     t_env = tramas_a_segundos(np.arange(len(env)))
     beats = tramas_a_segundos(pulsos(a["fase"], a["tempo"]["periodo"], len(env)))
@@ -234,7 +280,7 @@ def figura_espectros(ejemplos, nombre_archivo="espectros_fft.png", mostrar=False
                              constrained_layout=True)
     ejes = np.atleast_1d(ejes).ravel()
     for ax, (d, extra) in zip(ejes, ejemplos):
-        fc, db = espectro_tercios(extra["f"], extra["P"], 20, extra["fs"] / 2)
+        fc, db = extra["espectro"]
         for b, (f1, f2) in C.BANDAS.items():
             ax.axvspan(f1, f2, color=COLOR_BANDA[b], alpha=0.07, linewidth=0)
         ax.axvspan(C.SR / 2, extra["fs"] / 2, color=GRIS, alpha=0.25, linewidth=0)
@@ -257,8 +303,8 @@ def figura_espectros(ejemplos, nombre_archivo="espectros_fft.png", mostrar=False
         ax.set_ylabel("|X(f)| (dB)")
     for ax in ejes[max(0, n - columnas):n]:
         ax.set_xlabel("Frecuencia (Hz, escala logarítmica)")
-    G.titulo_figura(fig, "Espectro de magnitud |X(f)| de cada canción completa (FFT con ventana de Hann; "
-                         "0 dB = banda más fuerte; promediado en 1/6 de octava)")
+    G.titulo_figura(fig, "Espectro de potencia de cada canción completa (Welch: FFT de 65 536 puntos con ventana "
+                         "de Hann, promediada; 0 dB = banda más fuerte; 1/6 de octava)")
     fig.text(0.01, -0.015, "Franjas de color: bandas de análisis (graves 30–200 Hz, medios 200–2 000 Hz, agudos "
              "2–10 kHz). Zona gris: lo que se elimina al bajar a fs = 22 050 Hz (por encima de Nyquist = 11 025 Hz).",
              fontsize=9, color=TEXTO_2)
@@ -266,9 +312,12 @@ def figura_espectros(ejemplos, nombre_archivo="espectros_fft.png", mostrar=False
 
 
 # ============================================================ 5. Muestreo y aliasing
-def figura_aliasing(d, extra, nombre_archivo="muestreo_aliasing.png", mostrar=False):
-    """Bajar de fs original a 22 050 Hz bien (con filtro) y mal (tomando 1 de cada M muestras)."""
-    ym, fs = extra["x"].mean(axis=0), extra["fs"]
+def figura_aliasing(d, x, fs, nombre_archivo="muestreo_aliasing.png", mostrar=False):
+    """Bajar de fs original a 22 050 Hz bien (con filtro) y mal (tomando 1 de cada M muestras).
+
+    Se usa la canción con más energía por encima de 11 025 Hz, que es la que más se afecta.
+    """
+    ym = x.mean(axis=0)
     M = fs // C.SR
     if M < 2 or fs % C.SR:
         print(f"  (se omite la figura de aliasing: fs = {fs} Hz no es múltiplo entero de {C.SR} Hz)")
@@ -281,37 +330,56 @@ def figura_aliasing(d, extra, nombre_archivo="muestreo_aliasing.png", mostrar=Fa
     bien, mal = bien[:n], mal[:n]
     f, Pb = espectro(bien, C.SR)
     _, Pm = espectro(mal, C.SR)
+    fo, Po = espectro(seg, fs)
+    ref = 10 * np.log10(max(Pb.max(), Pm.max()))
     fc, db_b = espectro_tercios(f, Pb, 20, C.SR / 2)
     _, db_m = espectro_tercios(f, Pm, 20, C.SR / 2)
-    ref = 10 * np.log10(max(Pb.max(), Pm.max()))
     db_b += 10 * np.log10(Pb.max()) - ref
     db_m += 10 * np.log10(Pm.max()) - ref
     banda = (f >= 8000) & (f < C.SR / 2)
     exceso = 10 * np.log10(Pm[banda].sum() / Pb[banda].sum())
-    fig, ax = plt.subplots(figsize=(12, 4.6), constrained_layout=True)
-    ax.plot(fc, db_m, color=NARANJA, linewidth=1.4, label=f"Sin filtro: x[{M}n] (hay aliasing)")
-    ax.plot(fc, db_b, color=AZUL, linewidth=1.6, label="Con filtro antialiasing (el que usa el sistema)")
-    ax.axvspan(8000, C.SR / 2, color=GRIS, alpha=0.18, linewidth=0)
-    ax.text(9400, -6, f"8–11 kHz:\n+{exceso:.1f} dB de\nenergía falsa", ha="center", va="top", fontsize=9, color=TEXTO)
-    ax.set_xscale("log")
-    ax.set_xlim(20, C.SR / 2)
-    ax.set_xticks([31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000])
-    ax.set_xticklabels(["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k"])
-    ax.minorticks_off()
-    ax.set_ylim(-80, 5)
-    ax.set_xlabel(f"Frecuencia (Hz)  ·  0 a {C.SR / 2:,.0f} Hz (Nyquist con fs = {C.SR:,} Hz)".replace(",", " "))
-    ax.set_ylabel("|X(f)| (dB)")
-    ax.legend(loc="lower left", fontsize=9)
-    ax.set_title(f"Submuestreo de {d['cancion']} de {fs} a {C.SR} Hz (10 s centrales)")
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 4.8), constrained_layout=True,
+                                 gridspec_kw={"width_ratios": [1.5, 1]})
+    a1.plot(fc, db_b, color=AZUL, linewidth=1.8, label="Con filtro antialiasing (el que usa el sistema)")
+    a1.plot(fc, db_m, color=NARANJA, linewidth=1.4, linestyle="--", label=f"Sin filtro: x[{M}n] (hay aliasing)")
+    a1.axvspan(5000, C.SR / 2, color=GRIS, alpha=0.18, linewidth=0)
+    a1.text(7400, 2, "ampliado en (b)", ha="center", va="top", fontsize=8.5, color=TEXTO_2)
+    a1.set_xscale("log")
+    a1.set_xlim(20, C.SR / 2)
+    a1.set_xticks([31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000])
+    a1.set_xticklabels(["31", "63", "125", "250", "500", "1k", "2k", "4k", "8k"])
+    a1.minorticks_off()
+    a1.set_ylim(-80, 5)
+    a1.set_xlabel("Frecuencia (Hz, escala logarítmica)")
+    a1.set_ylabel("Potencia (dB)")
+    a1.legend(loc="lower left", fontsize=9)
+    a1.set_title("(a) Espectro después de bajar a 22 050 Hz (0 a 11 025 Hz)", fontsize=10.5)
+
+    # (b) zoom lineal: la energía falsa es el contenido de 11–22 kHz reflejado en 22 050 − f
+    def suave(P, ancho=200):
+        return 10 * np.log10(np.convolve(P, np.ones(ancho) / ancho, mode="same") + 1e-30) - ref
+    sel = (f >= 5000) & (f <= C.SR / 2)
+    a2.plot(f[sel] / 1000, suave(Pb)[sel], color=AZUL, linewidth=1.8, label="con filtro")
+    a2.plot(f[sel] / 1000, suave(Pm)[sel], color=NARANJA, linewidth=1.4, linestyle="--", label="sin filtro")
+    alto = (fo >= C.SR / 2) & (fo <= 16000)          # los MP3 casi no tienen contenido sobre 16 kHz
+    Po_esc = Po * (Pb.sum() / Po[fo < C.SR / 2].sum())  # misma escala que las otras dos curvas
+    a2.plot((fs / 2 - fo[alto]) / 1000, suave(Po_esc)[alto], color=GRIS, linewidth=1.2, linestyle=":",
+            label="original de 11–16 kHz,\nreflejado en 22 050 − f")
+    a2.set_xlim(5, C.SR / 2000)
+    visibles = np.concatenate([suave(Pb)[sel], suave(Pm)[sel]])
+    a2.set_ylim(visibles.min() - 8, visibles.max() + 4)
+    a2.set_xlabel("Frecuencia (kHz)")
+    a2.legend(loc="lower left", fontsize=8.5)
+    a2.set_title(f"(b) 5–11 kHz: sin filtro aparecen +{exceso:.1f} dB entre 8 y 11 kHz", fontsize=10.5)
+    G.titulo_figura(fig, f"Submuestreo de {d['cancion']} de {fs} a {C.SR} Hz (10 s centrales): efecto del aliasing")
     ruta = G.terminar(fig, nombre_archivo, mostrar)
-    return ruta, {"exceso_8k_11k_dB": exceso}
+    return ruta, {"exceso_8k_11k_dB": exceso, "cancion": d["cancion"]}
 
 
 # ============================================================ 6. Ruido
 def figura_ruido(d, extra, snr_db=0.0, semilla=0, nombre_archivo="ruido_comparacion.png", mostrar=False):
-    y = extra["y"]
-    frags = fragmentar(y)
-    inicio, q = frags[len(frags) // 2]
+    inicio, q = extra["inicio_centro"], extra["centro"]
     rng = np.random.default_rng(semilla)
     r = agregar_ruido(q, snr_db, rng, "blanco")
     a_q, a_r = analizar_ritmo(q), analizar_ritmo(r)
@@ -354,7 +422,7 @@ def figura_ruido(d, extra, snr_db=0.0, semilla=0, nombre_archivo="ruido_comparac
     ax_r.legend(fontsize=8.5, loc="upper right")
     ax_r.set_title(f"(c) Autocorrelación: R[P] pasa de {a_q['tempo']['claridad']:.2f} a {a_r['tempo']['claridad']:.2f}")
 
-    tabla = prueba_ruido_tempo(extra.get("todas", [(d["cancion"], y)]), semilla=semilla)
+    tabla = prueba_ruido_tempo(extra.get("rutas", []), semilla=semilla)
     for tipo, color in (("blanco", AZUL), ("rosa", NARANJA)):
         snrs = sorted({s for (tt, s) in tabla if tt == tipo}, reverse=True)
         ax_f.plot(snrs, [100 * tabla[(tipo, s)] for s in snrs], color=color, marker="o", linewidth=2,
@@ -372,12 +440,13 @@ def figura_ruido(d, extra, snr_db=0.0, semilla=0, nombre_archivo="ruido_comparac
                   "claridad_original": a_q["tempo"]["claridad"], "claridad_ruido": a_r["tempo"]["claridad"]}
 
 
-def prueba_ruido_tempo(canciones, snrs=(20, 10, 5, 0, -5), por_cancion=3, semilla=0):
-    """Fracción de fragmentos cuyo tempo con ruido coincide (±4 %) con el tempo sin ruido."""
+def prueba_ruido_tempo(rutas, snrs=(20, 10, 5, 0, -5), por_cancion=3, semilla=0):
+    """Fracción de fragmentos cuyo tempo con ruido coincide (±4 %) con el tempo sin ruido.
+    Lee las canciones de a una (no las guarda todas en memoria)."""
     rng = np.random.default_rng(semilla)
     conteo = {}
-    for _, y in canciones:
-        frags = fragmentar(y)
+    for ruta in rutas:
+        frags = fragmentar(cargar_audio(ruta))
         elegidos = [frags[i] for i in np.linspace(0, len(frags) - 1, min(por_cancion, len(frags))).astype(int)]
         for _, q in elegidos:
             bpm0 = analizar_ritmo(q)["tempo"]["bpm"]
@@ -399,28 +468,34 @@ def prueba_ruido_tempo(canciones, snrs=(20, 10, 5, 0, -5), por_cancion=3, semill
 def figura_segmentacion(d, extra, nombre_archivo="segmentacion.png", mostrar=False):
     y = extra["y"]
     dur = len(y) / C.SR
-    a = extra["analisis"][len(extra["analisis"]) // 2]
+    a = extra["a_centro"]
     frags = fragmentar(y)
-    inicio_frag = frags[len(frags) // 2][0]
+    inicio_frag = extra["inicio_centro"]
     fig, (a1, a2, a3) = plt.subplots(3, 1, figsize=(12, 10), constrained_layout=True,
                                      gridspec_kw={"height_ratios": [1, 1, 1.1]})
     mn, mx, idx = _envolvente_minmax(y)
     a1.fill_between(idx / C.SR, mn, mx, color=GRIS, linewidth=0)
     hueco = 0.012 * dur
+    usados = {round(ini, 3) for ini, _ in fragmentos_para_clasificar(y)}
     for k, (ini, _) in enumerate(frags):
         nivel = 1.15 + 0.17 * (k % 2)
-        color = AZUL if k % 2 == 0 else NARANJA
-        a1.plot([ini + hueco / 2, ini + C.SEGMENTO_S - hueco / 2], [nivel, nivel], color=color, linewidth=5,
-                solid_capstyle="round")
+        usado = round(ini, 3) in usados
+        color = (AZUL if k % 2 == 0 else NARANJA) if usado else REJILLA
+        a1.plot([ini + hueco / 2, ini + C.SEGMENTO_S - hueco / 2], [nivel, nivel], color=color,
+                linewidth=5 if usado else 3, solid_capstyle="round")
         if len(frags) <= 24:
             a1.text(ini + C.SEGMENTO_S / 2, nivel + 0.07, f"{k + 1}", ha="center", fontsize=7.5, color=TEXTO_2)
+    a1.plot([], [], color=AZUL, linewidth=5, label=f"usados por el clasificador ({len(usados)})")
+    a1.plot([], [], color=REJILLA, linewidth=3, label="no usados")
+    a1.legend(loc="lower right", fontsize=8.5, ncol=2)
     a1.set_xlim(0, dur)
     a1.set_ylim(-1.1, 1.55)
     a1.set_yticks([-1, 0, 1])
     a1.set_xlabel("Tiempo (s)")
     a1.set_ylabel("Amplitud")
     a1.set_title(f"(a) La canción se divide en {len(frags)} fragmentos de {C.SEGMENTO_S:g} s que avanzan "
-                 f"{C.SEGMENTO_S * (1 - C.SOLAPE):g} s (solapamiento {C.SOLAPE:.0%}); cada fragmento es un ejemplo")
+                 f"{C.SEGMENTO_S * (1 - C.SOLAPE):g} s (solapamiento {C.SOLAPE:.0%}); el clasificador usa como máximo "
+                 f"{C.MAX_FRAGMENTOS}, sin los primeros ni los últimos {C.RECORTE_S:g} s")
 
     t0 = 3.0
     i0 = int((inicio_frag + t0) * C.SR)
@@ -506,44 +581,51 @@ def analizar(carpeta=None, cancion=None, mostrar=False):
     guardar_tabla(filas)
     resumen = resumen_por_genero(filas)
 
-    # una canción representativa por género (la primera de cada uno)
+    # una canción representativa por género: la que tiene menos muestras saturadas (recortadas en ±1),
+    # para que las figuras muestren la señal y no la distorsión de la grabación
     ejemplos = []
     for g in C.GENEROS:
-        d = next((x for x in filas if x["genero"] == g), None)
-        if d:
+        candidatas = [x for x in filas if x["genero"] == g]
+        if candidatas:
+            d = min(candidatas, key=lambda x: (round(x["saturadas_pct"], 3), x["cancion"]))
             ejemplos.append((d, extras[d["cancion"]]))
     elegida = cancion or ejemplos[0][0]["cancion"]
     if elegida not in extras:
         raise ValueError(f"No se encontró '{elegida}'. Opciones: {', '.join(extras)}")
     d_sel = next(x for x in filas if x["cancion"] == elegida)
-    ex_sel = extras[elegida]
-    ex_sel["todas"] = [(nombre, e["y"]) for nombre, e in extras.items()]
+    ex_sel = cargar_detalle(extras[elegida]["ruta"])
+    ex_sel["rutas"] = [e["ruta"] for e in extras.values()]
 
     figura_formas_de_onda(ejemplos, mostrar=mostrar)
     figura_ventanas(d_sel, ex_sel, mostrar=mostrar)
     figura_espectros(ejemplos, mostrar=mostrar)
-    _, info_alias = figura_aliasing(d_sel, ex_sel, mostrar=mostrar)
+    d_alias = min(filas, key=lambda x: x["energia_bajo_11025Hz_pct"])   # la que más contenido tiene sobre 11 kHz
+    x_alias, fs_alias = cargar_original(extras[d_alias["cancion"]]["ruta"])
+    _, info_alias = figura_aliasing(d_alias, x_alias, fs_alias, mostrar=mostrar)
+    del x_alias
     _, info_ruido = figura_ruido(d_sel, ex_sel, mostrar=mostrar)
     figura_segmentacion(d_sel, ex_sel, mostrar=mostrar)
     figura_tempos(filas, mostrar=mostrar)
-    a_sel = ex_sel["analisis"][len(ex_sel["analisis"]) // 2]
-    G.graficar_ritmo(a_sel, f"{G.nombre_genero(d_sel['genero'])} ({elegida}), fragmento central",
+    G.graficar_ritmo(ex_sel["a_centro"], f"{G.nombre_genero(d_sel['genero'])} ({elegida}), fragmento central",
                      "analisis_ritmico.png", mostrar=mostrar)
-    for d, ex in ejemplos:   # una figura de análisis rítmico por género
-        G.graficar_ritmo(ex["analisis"][len(ex["analisis"]) // 2], f"{G.nombre_genero(d['genero'])} ({d['cancion']})",
+    del ex_sel
+    for d, ex in ejemplos:   # una figura de análisis rítmico por género (se lee cada canción de a una)
+        det = cargar_detalle(ex["ruta"])
+        G.graficar_ritmo(det["a_centro"], f"{G.nombre_genero(d['genero'])} ({d['cancion']})",
                          f"analisis_ritmico_{d['genero']}.png", mostrar=False)
+        del det
 
     patrones = []
     for g in C.GENEROS:
-        sel = [a for d in filas if d["genero"] == g for a in extras[d["cancion"]]["analisis"] if a["n_compases"] > 0]
+        sel = [p for d in filas if d["genero"] == g for p in extras[d["cancion"]]["patrones"]]
         if sel:
-            patrones.append((g, np.mean([a["patron"] for a in sel], axis=0),
-                             float(np.median([a["tempo"]["bpm"] for a in sel])), len(sel)))
+            tempos = np.concatenate([extras[d["cancion"]]["tempos"] for d in filas if d["genero"] == g])
+            patrones.append((g, np.mean(sel, axis=0), float(np.median(tempos)), len(sel)))
     G.graficar_patrones(patrones, mostrar=mostrar)
 
     print(f"\nResumen ({elegida}):")
     if info_alias:
-        print(f"  Aliasing sin filtro: +{info_alias['exceso_8k_11k_dB']:.1f} dB de energía falsa entre 8 y 11 kHz")
+        print(f"  Aliasing sin filtro ({info_alias['cancion']}): +{info_alias['exceso_8k_11k_dB']:.1f} dB de energía falsa entre 8 y 11 kHz")
     print(f"  Ruido blanco 0 dB: tempo {info_ruido['bpm_original']:.1f} -> {info_ruido['bpm_ruido']:.1f} BPM, "
           f"claridad {info_ruido['claridad_original']:.2f} -> {info_ruido['claridad_ruido']:.2f}")
     print("  Fragmentos con el mismo tempo según la SNR: " + ", ".join(
