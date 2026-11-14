@@ -199,10 +199,18 @@ def evaluar(carpeta=None, k=C.K_VECINOS, graficar=True, mostrar=False):
 
 
 # ============================================================ Clasificar un audio nuevo
-def clasificar_senal(y, carpeta=None, k=C.K_VECINOS, datos=None):
-    """Entrena con todas las canciones de la base y clasifica la señal `y` (ya a SR Hz)."""
+def clasificar_senal(y, carpeta=None, k=C.K_VECINOS, datos=None, excluir=None):
+    """Clasifica la señal `y` (ya a SR Hz) con las canciones de la base.
+
+    `excluir` es el nombre de una canción (sin extensión) que no se usa para entrenar.
+    Así una canción que ya está en la base no se predice a sí misma.
+    """
     datos = datos or extraer_conjunto(carpeta)
-    modelo = KNN(k).entrenar(datos["X"], datos["genero"])
+    X, gen = datos["X"], datos["genero"]
+    if excluir is not None:
+        keep = datos["cancion"] != excluir
+        X, gen = X[keep], gen[keep]
+    modelo = KNN(k).entrenar(X, gen)
     frags = fragmentar(y)
     vectores, tempos = [], []
     for _, f in frags:

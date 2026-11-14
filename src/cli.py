@@ -62,13 +62,19 @@ def cmd_evaluar(args):
 
 def cmd_clasificar(args):
     from carga import cargar_audio
-    from clasificador import clasificar_senal, imprimir_clasificacion
+    from clasificador import clasificar_senal, imprimir_clasificacion, extraer_conjunto
     y = cargar_audio(args.archivo)
     if args.inicio is not None or args.duracion is not None:
         i = int((args.inicio or 0) * C.SR)
         y = y[i:] if args.duracion is None else y[i:i + int(args.duracion * C.SR)]
-    res = clasificar_senal(y, args.carpeta, k=args.k)
+    # si el archivo es una canción de la base, se deja por fuera del entrenamiento
+    stem = Path(args.archivo).stem
+    datos = extraer_conjunto(args.carpeta)
+    excluir = stem if stem in set(datos["cancion"]) else None
+    res = clasificar_senal(y, args.carpeta, k=args.k, datos=datos, excluir=excluir)
     imprimir_clasificacion(res, Path(args.archivo).name)
+    if excluir:
+        print("  (canción de la base: se excluyó de su propio entrenamiento)")
 
 
 def cmd_grabar(args):
