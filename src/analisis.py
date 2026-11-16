@@ -552,8 +552,9 @@ def figura_tempos(filas, nombre_archivo="tempos_por_genero.png", mostrar=False):
     fig, ax = plt.subplots(figsize=(11, 4.6), constrained_layout=True)
     for i, g in enumerate(generos):
         v = [d["tempo_BPM"] for d in filas if d["genero"] == g]
-        ax.scatter(v, np.full(len(v), i) + np.linspace(-0.12, 0.12, len(v)), s=60, color=G.COLOR_GENERO[g],
-                   marker=G.MARCADOR_GENERO[g], edgecolors=SUPERFICIE, linewidths=1, zorder=3)
+        ax.scatter(v, np.full(len(v), i) + np.linspace(-0.12, 0.12, len(v)),
+                   s=150 if G.MARCADOR_GENERO[g] == "*" else 60, color=G.COLOR_GENERO[g],
+                   marker=G.MARCADOR_GENERO[g], edgecolors=SUPERFICIE, linewidths=0.6 if G.MARCADOR_GENERO[g] == "*" else 1, zorder=3)
     ax.set_yticks(range(len(generos)))
     ax.set_yticklabels([G.nombre_genero(g) for g in generos])
     ax.set_xlabel("Tempo estimado (BPM, mediana de los fragmentos de cada canción)")

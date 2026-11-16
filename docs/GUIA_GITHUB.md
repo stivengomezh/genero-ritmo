@@ -249,26 +249,50 @@ Zip: `turno5_juanjose.zip`.
 
 Después de este turno el programa ya corre completo. Cada uno puede probarlo (Parte E).
 
-### Turno 6 — Manuel: resultados y metodología
+### Ajuste — Stiven (hecho)
+
+`ajuste_stiven.zip`: `src/config.py`, `src/carga.py`, `src/clasificador.py` →
+`Recorte de introducción y final, y máximo de 24 fragmentos por canción`.
+
+### Turno 6 — Stiven: análisis con las canciones reales
+
+Zip: `turno6_stiven.zip`. Windows pregunta si reemplaza `analisis.py`: **sí**.
 
 | Archivos | Mensaje |
 |---|---|
-| carpeta `results/` completa, `docs/metodologia.md` | `Resultados con las canciones reales y metodología detallada` |
+| `src/analisis.py` | `Análisis de las 34 canciones: espectro por Welch, menos memoria, aliasing y segmentación` |
+
+### Turno 7 — Juan José: figuras, ayuda de comandos y guía
+
+Zip: `turno7_juanjose.zip`. Reemplazar los archivos: **sí**.
+
+| Archivos | Mensaje |
+|---|---|
+| `src/graficas.py`, `src/cli.py`, `docs/GUIA_GITHUB.md` | `Ajustes de figuras y de la ayuda de comandos; guía de GitHub actualizada` |
+
+### Turno 8 — Manuel: resultados y metodología
+
+Zip: `turno8_manuel.zip` (trae la carpeta `results/` con 24 archivos y `docs/metodologia.md`).
+
+| Archivos | Mensaje |
+|---|---|
+| carpeta `results/` completa, `docs/metodologia.md` | `Resultados con las 34 canciones reales y metodología detallada` |
 
 En C3, en vez de dar `+` archivo por archivo, se puede dar `+` sobre la carpeta `results`.
-Los archivos `.npz` no aparecen porque el `.gitignore` los excluye (son copias temporales).
+Si en *Changes* aparece algún `.npz`, no le dé `+`: el `.gitignore` debería ocultarlo.
 
-### Turno 7 — Los tres: README (uno a la vez)
+### Turno 9 — Stiven: README
 
-1. **Stiven** sube `README.md` → `README: descripción, estado, ejecución y resultados`.
-2. **Manuel** hace pull, abre `README.md` en VS Code, completa la tabla de canciones
-   (sección 3.1) y sube → `README: tabla de canciones (título y artista)`.
-3. **Juan José** hace pull, completa o revisa la interpretación de la clasificación
-   (sección 7.10) y sube → `README: interpretación de los resultados de clasificación`.
+Zip: `turno9_stiven.zip`.
 
-**Uno a la vez** y siempre con pull antes: si dos editan el README al mismo tiempo habrá conflicto.
+| Archivos | Mensaje |
+|---|---|
+| `README.md` | `README: descripción, estado, datos, ejecución, muestreo y resultados con canciones reales` |
 
-### Turno 8 — Documentos de las entregas
+Después de este turno, abran la página del repositorio en GitHub: el README debe verse con las
+figuras de `results/`.
+
+### Turno 10 — Documentos de las entregas
 
 Quien los tenga sube a `docs/` el documento de la Entrega 1 y el documento de avance en PDF →
 `Documentos de la Entrega 1 y del avance`.
@@ -301,6 +325,7 @@ En el README los comandos aparecen como `python main.py ...`; en Windows escríb
 
 | Qué pasa | Qué hacer |
 |---|---|
+| Abajo a la izquierda aparece `1↓ 1↑` y en GitHub no están sus archivos | Su commit quedó solo en su computador porque alguien subió otro cambio antes. En la terminal: `git restore .`, luego `git pull --rebase origin main` y luego `git push origin main`. No creen ni borren archivos directamente en la página de GitHub: todo se sube desde VS Code. |
 | *"El término 'pip' no se reconoce…"* | Use `py -m pip install -r requirements.txt` (paso B4). |
 | *"El término 'py' no se reconoce…"* | Python no está instalado, o se instaló con VS Code abierto. Cierre VS Code del todo, ábralo y pruebe otra vez `py --version`. Si sigue igual, instale Python desde python.org (paso A3) marcando *Add python.exe to PATH*, y vuelva a cerrar y abrir VS Code. |
 | `python` abre la Microsoft Store o dice *"No se encontró Python"* | Es un acceso directo de Windows, no Python. Use `py` en lugar de `python`. Si `py` tampoco funciona, instale Python (paso A3). |
@@ -324,8 +349,8 @@ En el README los comandos aparecen como `python main.py ...`; en Windows escríb
 - [ ] La docente tiene acceso (repositorio público, o agregada como colaboradora).
 - [ ] Descripción de 5 líneas para la plataforma:
 
-> Sistema que identifica el género musical (salsa, reggaetón, bachata, vallenato, cumbia, rock,
-> electrónica, balada) a partir del ritmo. Implementado: carga y remuestreo a 22 050 Hz, forma de
-> onda, caracterización, FFT, aliasing, ruido, segmentación en fragmentos de 10 s, envolvente de
-> ataques por bandas, tempo por autocorrelación, patrón de compás y un primer clasificador k-NN.
-> Pendiente: ampliar la base de canciones, resolver la ambigüedad de octava del tempo y validar con micrófono.
+> Sistema que identifica el género musical (salsa, reggaetón, bachata, vallenato, cumbia, rock y
+> electrónica) a partir del ritmo. Implementado: carga y remuestreo a 22 050 Hz, forma de onda,
+> caracterización, FFT, aliasing, ruido, segmentación, envolvente de ataques por bandas, tempo por
+> autocorrelación, patrón de compás y un clasificador k-NN: 79 % de 34 canciones reales (azar 14 %).
+> Pendiente: más géneros y canciones, separar vallenato y cumbia, y validar con micrófono.

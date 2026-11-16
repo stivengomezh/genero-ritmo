@@ -12,9 +12,8 @@ La señal que estudiamos es **audio musical**: una canción es una señal de pre
 x(t) que se graba, se muestrea y se guarda como una secuencia de números x[n].
 
 El objetivo es un sistema que **identifique el género de una canción a partir de su ritmo**,
-usando 10 s de audio. En esta entrega se trabaja con siete géneros y 34 canciones: **salsa,
-reggaetón, bachata, vallenato, cumbia, rock y electrónica**. Para la entrega final se agregarán
-más géneros (balada, entre otros) y más canciones.
+usando 10 s de audio. Se trabaja con ocho géneros y 40 canciones: **salsa, reggaetón,
+bachata, vallenato, cumbia, rock, electrónica y balada**.
 
 El ritmo no se ve directamente en la forma de onda, porque está mezclado con la melodía y la
 armonía. Lo que se repite son los **ataques**: los instantes en que empieza un golpe de bombo,
@@ -27,7 +26,8 @@ caja en 2 y 4 del rock, el contratiempo de la cumbia).
 
 ```
 audio → mono, 22 050 Hz → fragmentos de 10 s → STFT → flujo espectral en 3 bandas (envolventes de ataques)
-      → autocorrelación (tempo, subdivisión) + patrón de compás (16 pasos) → 52 características → k-NN → género
+      → autocorrelación (tempo, subdivisión) + patrón de compás (16 pasos)
+      + intensidad de los golpes (percusividad, fuerza, dinámica) → 57 características → k-NN → género
 ```
 
 ## 2. Estado actual
@@ -36,22 +36,32 @@ audio → mono, 22 050 Hz → fragmentos de 10 s → STFT → flujo espectral en
 
 - Carga de MP3 o WAV de cualquier fs y número de canales, mezcla a mono, filtro antialiasing y
   remuestreo a 22 050 Hz, normalización y segmentación en fragmentos de 10 s.
-- Análisis de la señal con las 34 canciones: forma de onda, caracterización, espectro (FFT),
+- Análisis de la señal con las 40 canciones: forma de onda, caracterización, espectro (FFT),
   muestreo y aliasing, efecto del ruido y segmentación (`python main.py analizar`).
 - Análisis rítmico: espectrograma, envolventes de ataques por banda, autocorrelación y tempo,
   espectro de la envolvente y patrón de compás.
-- Primer clasificador por **k vecinos más cercanos**: **79 % de las canciones** (27 de 34) y
-  62 % de los fragmentos de 10 s bien clasificados, con validación dejando una canción por fuera
-  (azar: 14 %).
+- Clasificador por **k vecinos más cercanos**: **75 % de las canciones** (30 de 40) y 61 % de
+  los fragmentos de 10 s bien clasificados en 8 géneros, con validación dejando una canción por
+  fuera (azar: 12 %).
+- Al clasificar una canción que ya está en la base, se deja por fuera de su propio
+  entrenamiento (si no, se reconocería a sí misma y el resultado no diría nada).
 - Clasificación de un archivo o de una grabación con el micrófono.
 - Generador de ritmos sintéticos, para probar el código sin canciones.
 
+**Cambios desde la Entrega 2:**
+
+- Se agregaron la **balada** (5 canciones) y la quinta bachata (*Tengo un Amor*).
+- Se agregaron 5 características de **intensidad de los golpes**: qué parte de la energía es
+  percusiva (por bandas) y qué tan fuertes son los ataques, y el clasificador ahora da **el
+  mismo peso a cada grupo** de características (7.10). Con las 40 canciones, la exactitud por
+  fragmento subió de 57 a 61 % y la balada pasó de 2 a 4 canciones bien clasificadas de 5.
+
 **Falta para la entrega final:**
 
-- Más géneros (balada y otros) y más canciones por género, de más artistas. Con 4–5 canciones
-  por género, cada canción mal clasificada mueve la exactitud 3 puntos.
-- Separar mejor **vallenato y cumbia** (5 de los 7 errores son entre estos géneros) y **rock y
-  electrónica**; probablemente haga falta una descripción más fina de la subdivisión.
+- Más canciones por género, de más artistas. Con 5 canciones por género, cada canción mal
+  clasificada mueve la exactitud 2,5 puntos, y algunas cambian de género con votos cercanos al 30 %.
+- Separar mejor **vallenato y cumbia** (5 de los 10 errores son entre ellos o con vallenato) y el
+  **rock** de la electrónica y la balada.
 - Resolver la **ambigüedad de octava del tempo**: el vallenato se mide a veces en ~77 BPM y a
   veces en ~130 BPM (ver 7.6).
 - Probar con grabaciones reales por micrófono (hasta ahora el ruido es simulado).
@@ -78,6 +88,7 @@ audio → mono, 22 050 Hz → fragmentos de 10 s → STFT → flujo espectral en
 | `bachata_02.mp3` | Propuesta Indecente | Romeo Santos |
 | `bachata_03.mp3` | Corazón Sin Cara | Prince Royce |
 | `bachata_04.mp3` | Princesa | Frank Reyes |
+| `bachata_05.mp3` | Tengo un Amor | Toby Love |
 | `vallenato_01.mp3` | Los Caminos de la Vida | Los Diablitos |
 | `vallenato_02.mp3` | La Gota Fría | Carlos Vives |
 | `vallenato_03.mp3` | Olvídala | Binomio de Oro de América |
@@ -98,14 +109,19 @@ audio → mono, 22 050 Hz → fragmentos de 10 s → STFT → flujo espectral en
 | `electronica_03.mp3` | Levels | Avicii |
 | `electronica_04.mp3` | Summer | Calvin Harris |
 | `electronica_05.mp3` | Don't You Worry Child | Swedish House Mafia |
+| `balada_01.mp3` | Vivir Así Es Morir de Amor | Camilo Sesto |
+| `balada_02.mp3` | El Triste | José José |
+| `balada_03.mp3` | Me Va a Extrañar | Ricardo Montaner |
+| `balada_04.mp3` | Amiga Mía | Alejandro Sanz |
+| `balada_05.mp3` | La Soledad | Laura Pausini |
 
 - Las canciones tienen derechos de autor y **no se suben al repositorio** (`.gitignore`). La
   tabla dice cuáles son para que cualquiera pueda conseguirlas; las instrucciones para
   nombrarlas están en [`data/canciones/LEEME.md`](data/canciones/LEEME.md).
 - El género de cada archivo se toma del inicio de su nombre (`salsa_01.mp3` → salsa).
-- Son 34 canciones completas (de 2 a 7,5 minutos; 141 minutos en total), todas MP3 a 44,1 kHz
-  en estéreo. La bachata tiene 4 canciones: el archivo de *Tengo un Amor* (Toby Love) llegó
-  repetido y se dejó por fuera; se agregará para la entrega final.
+- Son 40 canciones completas (de 2 a 7,4 minutos; 167 minutos en total), todas MP3 en estéreo:
+  36 a 44,1 kHz y 4 a 48 kHz (*Tengo un Amor*, *El Triste*, *Me Va a Extrañar* y *Amiga Mía*).
+  El programa remuestrea todas a 22 050 Hz, así que la fs original no importa.
 
 ### 3.2 Ritmos sintéticos (control)
 
@@ -163,7 +179,7 @@ genero-ritmo/
 │   ├── config.py           todos los parámetros: fs, STFT, bandas, tempo, segmentación, k
 │   ├── carga.py            lectura, mono, remuestreo, normalización, fragmentos
 │   ├── ritmo.py            espectrograma, envolventes de ataques, autocorrelación, tempo, patrón de compás
-│   ├── caracteristicas.py  vector de 52 características rítmicas por fragmento
+│   ├── caracteristicas.py  vector de 57 características rítmicas por fragmento
 │   ├── clasificador.py     k-NN, validación, matriz de confusión
 │   ├── analisis.py         análisis de la señal (Entrega 2)
 │   ├── ruido.py            ruido blanco, rosa y filtro de micrófono
@@ -190,6 +206,7 @@ genero-ritmo/
 | STFT, espectrograma, compromiso tiempo-frecuencia | Base de las envolventes (7.5) |
 | Derivada discreta y rectificación de media onda | Flujo espectral: solo cuentan los aumentos de energía |
 | Filtrado por bandas (pasabajos, pasabanda, pasaaltos) | Separación en graves, medios y agudos; media móvil para quitar la tendencia |
+| Filtro de mediana (no lineal) | Separación de golpes y notas sostenidas en el espectrograma (percusividad, 7.10) |
 | Periodicidad y **autocorrelación** | Tempo y subdivisión del pulso (7.5 c) |
 | DFT de una secuencia periódica y propiedad de desplazamiento circular (\|X[k]\| no cambia si la secuencia se desplaza) | Forma del patrón de compás (7.7) |
 | Ruido blanco y rosa, SNR | Degradación controlada (7.8) |
@@ -211,7 +228,7 @@ La metodología completa, con todos los parámetros y las fórmulas, está en
 platillos, güira, guacharaca y maracas tienen su energía entre 3 y 10 kHz y son los que llevan
 las subdivisiones (las semicorcheas de la güira en la bachata, el raspado continuo de la
 guacharaca en el vallenato). Con 22 050 Hz el Nyquist queda en 11 025 Hz y la banda de agudos
-(2–10 kHz) se conserva completa; con 11 025 Hz se perdería la mitad de esa banda. En las 34
+(2–10 kHz) se conserva completa; con 11 025 Hz se perdería la mitad de esa banda. En las 40
 canciones, por encima de 11 kHz queda en mediana el 0,3 % de la energía (2,3 % en el peor caso,
 *Periódico de Ayer*), y bajar a la mitad reduce a la mitad el cálculo. Antes de bajar la tasa se
 aplica un filtro pasabajos antialiasing (7.4).
@@ -222,8 +239,9 @@ menor que la imprecisión normal de un músico (unos 10–20 ms).
 
 ## 7. Resultados actuales
 
-Todos los resultados de esta sección se obtienen con las 34 canciones de la tabla 3.1 y se
-regeneran con `python main.py analizar` y `python main.py evaluar` (unos 3 minutos en total).
+Todos los resultados de esta sección se obtienen con las 40 canciones de la tabla 3.1 y se
+regeneran con `python main.py analizar` y `python main.py evaluar` (unos 7 minutos la primera
+vez; después las características quedan guardadas y `evaluar` tarda segundos).
 Las figuras de detalle usan, de cada género, la canción con menos muestras saturadas (7.3).
 
 ### 7.1 Forma de onda x(t)
@@ -239,6 +257,8 @@ amplitud, la duración y la estructura de cada canción:
   "drops"), típicas de música producida para bailar.
 - **Cumbia (*La Pollera Colorá*):** los últimos 25 s son casi silencio. Por eso el clasificador
   descarta los primeros y los últimos 15 s de cada canción (7.9).
+- **Balada (*El Triste*):** el nivel más bajo de todas (−20,7 dBFS) y pausas cortas entre frases,
+  sin golpes que se repitan: la voz y la orquesta llevan la canción, no la percusión.
 
 En las demás, el ritmo apenas se intuye como una textura regular; para verlo hay que acercarse (7.2).
 
@@ -265,11 +285,12 @@ energía por banda, tempo y claridad del pulso de cada canción. Promedios por g
 |---|---|---|---|---|---|
 | Salsa | 92–105 | −11,9 | 12,2 | 26 / 61 / 10 % | 0,51 |
 | Reggaetón | 95–111 | −12,4 | 14,0 | 58 / 35 / 6 % | 0,50 |
-| Bachata | 120–134 | −14,3 | 14,1 | 41 / 51 / 7 % | 0,54 |
+| Bachata | 120–134 | −13,9 | 14,0 | 38 / 54 / 6 % | 0,53 |
 | Vallenato | 77–132 | −15,7 | 14,0 | 34 / 53 / 12 % | 0,52 |
 | Cumbia | 83–103 | −16,6 | 15,7 | 45 / 41 / 13 % | 0,55 |
 | Rock | 81–124 | −15,1 | 14,3 | 47 / 37 / 15 % | 0,43 |
 | Electrónica | 123–129 | −13,6 | 14,7 | 44 / 41 / 12 % | 0,57 |
+| Balada | 67–132 | −17,5 | 14,7 | 28 / 57 / 14 % | **0,29** |
 
 - **Media ≈ 0** en todas (|media| < 0,015): no hay componente DC apreciable; igual se resta al
   normalizar.
@@ -281,7 +302,8 @@ energía por banda, tempo y claridad del pulso de cada canción. Promedios por g
   electrónico); la salsa en los medios (61 %: campana, congas, piano y metales). Los agudos tienen
   poca energía en todos los géneros (6–15 %), aunque llevan muchos de los ataques.
 - La **claridad del pulso** R[P] (autocorrelación de la envolvente en el periodo del pulso, de 0
-  a 1) es parecida en todos los géneros (0,43–0,57): por sí sola no los distingue.
+  a 1) es parecida en los géneros bailables (0,43–0,57) y mucho más baja en la **balada (0,29)**:
+  sin batería marcada, la envolvente de ataques casi no se repite de un pulso al siguiente.
 
 ### 7.4 Espectro (FFT) y aliasing
 
@@ -330,9 +352,9 @@ Hay una figura por género en `results/analisis_ritmico_<genero>.png`.
 ![Tempos](results/tempos_por_genero.png)
 
 El tempo de cada canción es muy estable: entre los fragmentos de una misma canción varía en
-promedio 4–7 BPM (13 BPM en el vallenato). Pero **el tempo solo no basta**: salsa, reggaetón y
+promedio 4–8 BPM (13 BPM en el vallenato y 22 BPM en la balada, cuyo pulso es el menos claro). Pero **el tempo solo no basta**: salsa, reggaetón y
 cumbia comparten el rango de 83–111 BPM, y bachata, rock y electrónica el de 117–134 BPM.
-Clasificar solo con el tempo acierta el 47 % de las canciones (7.10).
+Clasificar solo con el tempo acierta el 48 % de las canciones (7.10).
 
 **Ambigüedad de octava:** la autocorrelación tiene picos en P, 2P y P/2, todos correctos
 matemáticamente. El sistema elige con una preferencia perceptual centrada en 110 BPM. Por eso:
@@ -342,6 +364,8 @@ matemáticamente. El sistema elige con una preferencia perceptual centrada en 11
 - El **vallenato** se mide unas veces a la mitad (~77 BPM en *Los Caminos de la Vida* y *Las
   Locuras Mías*) y otras no (~132 BPM en *Olvídala*). Esa inconsistencia es una de las razones por
   las que es el género que peor se clasifica.
+- La **balada** va de 67 a 132 BPM: con un pulso tan débil, el estimador a veces toma la
+  subdivisión (las corcheas del piano o de la guitarra) como pulso.
 
 Con los ritmos sintéticos, donde se conoce el tempo real, el estimador acierta el pulso exacto en
 el 83 % de los 160 fragmentos, y el pulso o su mitad/doble en el 96 %.
@@ -384,15 +408,15 @@ potencia de ruido que de música):
   sigue por encima del ruido.
 - **(c) Autocorrelación:** la claridad del pulso baja de 0,54 a 0,21, pero el máximo sigue en el
   mismo retardo: el tempo pasa de 99,6 a 99,4 BPM.
-- **(d) Todas las canciones** (3 fragmentos por canción, 102 en total): porcentaje de fragmentos
+- **(d) Todas las canciones** (3 fragmentos por canción, 120 en total): porcentaje de fragmentos
   cuyo tempo no cambia más de 4 %:
 
 | SNR | 20 dB | 10 dB | 5 dB | 0 dB | −5 dB |
 |---|---|---|---|---|---|
-| Ruido blanco | 95 % | 97 % | 90 % | 86 % | 74 % |
-| Ruido rosa | 96 % | 89 % | 89 % | 84 % | 75 % |
+| Ruido blanco | 97 % | 93 % | 89 % | 85 % | 70 % |
+| Ruido rosa | 93 % | 93 % | 88 % | 89 % | 73 % |
 
-Incluso con más ruido que música (−5 dB), tres de cada cuatro fragmentos conservan el tempo.
+Incluso con más ruido que música (−5 dB), siete de cada diez fragmentos conservan el tempo.
 Para que el ruido no domine, la envolvente total suma las tres bandas **con el mismo peso** (cada
 una dividida por su desviación estándar). Si se suman todas las frecuencias directamente, los
 agudos (el 90 % de los bins de la FFT) dominan: en una prueba con los ritmos sintéticos y ruido
@@ -407,7 +431,7 @@ con las bandas de igual peso.
    suficientes para medir un patrón. Para el clasificador, cada canción aporta **como máximo 24
    fragmentos**, repartidos a lo largo de la canción y **sin los primeros ni los últimos 15 s**
    (introducción y final, que suelen no tener la percusión completa). Así una canción de 7 minutos
-   no pesa el triple que una de 2: en total son 809 fragmentos (24 por canción, salvo *We Will
+   no pesa el triple que una de 2: en total son 953 fragmentos (24 por canción, salvo *We Will
    Rock You*, que dura 2 minutos y da 17).
 2. **Tramas de la STFT** de 1 024 muestras (46,4 ms, Δf = 21,5 Hz) con ventana de Hann, que avanzan
    256 muestras (11,6 ms, solapamiento 75 %). Cada trama da una muestra de la envolvente. Se eligió
@@ -419,61 +443,100 @@ con las bandas de igual peso.
 
 ![Clasificación](results/clasificacion.png)
 
-Cada fragmento se describe con **52 características**: tempo, claridad, autocorrelación en
-fracciones del pulso, energía, densidad y regularidad de ataques por banda, posición de los golpes
-en el compás, |DFT| del patrón y dinámica (detalle en `docs/metodologia.md`). Se estandarizan con
-la media y la desviación del conjunto de entrenamiento y se clasifican con **k-NN (k = 5)**: votan
-los 5 fragmentos más parecidos, con peso 1/distancia. El género de una canción es el más votado
-entre sus fragmentos.
+Cada fragmento se describe con **57 características** en 8 grupos: tempo; claridad y
+autocorrelación en fracciones del pulso; energía, densidad y regularidad de ataques por banda;
+posición de los golpes en el compás; |DFT| del patrón; dinámica; **percusividad** por banda; y
+**fuerza de los ataques** con el rango dinámico (detalle en `docs/metodologia.md`). Se
+estandarizan con la media y la desviación del conjunto de entrenamiento, cada una se multiplica
+por **1/√(tamaño de su grupo)** y se clasifican con **k-NN (k = 5)**: votan los 5 fragmentos más
+parecidos, con peso 1/distancia. El género de una canción es el más votado entre sus fragmentos.
 
-La validación **deja una canción por fuera**: se entrena con las otras 33 y se prueba con esa,
-para cada una de las 34. Así nunca hay fragmentos de la misma canción en entrenamiento y prueba
+La validación **deja una canción por fuera**: se entrena con las otras 39 y se prueba con esa,
+para cada una de las 40. Así nunca hay fragmentos de la misma canción en entrenamiento y prueba
 (si los hubiera, el clasificador reconocería la canción y no el género).
 
 | Características | Cantidad | Por fragmento | Por canción |
 |---|---|---|---|
-| Solo tempo | 1 | 38 % | 47 % |
-| Tempo y subdivisión (autocorrelación) | 9 | 45 % | 62 % |
-| Energía, densidad y regularidad por banda | 9 | 35 % | 47 % |
-| Patrón de compás | 33 | 52 % | 68 % |
-| **Todas** | **52** | **62 %** | **79 %** |
+| Solo tempo | 1 | 37 % | 48 % |
+| Tempo y subdivisión (autocorrelación) | 9 | 44 % | 55 % |
+| Energía, densidad y regularidad por banda | 9 | 35 % | 45 % |
+| Patrón de compás | 33 | 47 % | 65 % |
+| Intensidad (dinámica, percusividad, fuerza) | 6 | 31 % | 53 % |
+| **Todas** | **57** | **61 %** | **75 %** |
 
-Azar: 14 % (7 géneros). Cada grupo de características aporta algo, y juntas funcionan mejor que
-cualquiera por separado. El patrón de compás es el grupo que más aporta.
+Azar: 12 % (8 géneros). Ningún grupo basta solo, y juntos funcionan mejor que cualquiera por
+separado. El patrón de compás es el grupo que más aporta.
 
-**Por género** (canciones bien clasificadas): salsa 5/5, reggaetón 5/5, bachata 4/4, rock 4/5,
-electrónica 4/5, cumbia 3/5 y vallenato 2/5. Los 7 errores (`results/clasificacion_canciones.csv`):
+**Qué cambió respecto a la Entrega 2 y por qué.** Al agregar la balada, el clasificador de la
+Entrega 2 (52 características, todas con el mismo peso) acertaba solo 2 de las 5 baladas: las
+otras 3 las tomaba por rock. Una balada lenta con batería suave tiene un patrón parecido al de un
+rock lento (golpes en 2 y 4); lo que las separa es la **intensidad** de los golpes. Se hicieron
+dos cambios:
+
+1. **Percusividad** (3 valores, uno por banda). En el espectrograma, un golpe es una línea
+   vertical y una nota sostenida es una línea horizontal. Un **filtro de mediana** a lo largo del
+   tiempo conserva lo horizontal (H) y uno a lo largo de la frecuencia conserva lo vertical (P);
+   la máscara P²/(H² + P²) dice qué fracción de la energía es golpe (Fitzgerald, 2010). Además, la
+   **fuerza de los ataques** (flujo espectral medio dividido entre el nivel medio) y el **rango
+   dinámico** del RMS (percentil 90 − percentil 10, en dB).
+2. **El mismo peso para cada grupo.** En la distancia euclidiana, un grupo de n características
+   estandarizadas pesa en promedio n veces más que una sola: los 24 valores de |DFT| dominaban a
+   las demás. Multiplicar cada una por 1/√n hace que cada grupo pese lo mismo.
+
+| Con las 40 canciones | Por fragmento | Por canción | Baladas bien clasificadas |
+|---|---|---|---|
+| Entrega 2 (52 características, mismo peso cada una) | 57 % | 73 % (29) | 2 de 5 |
+| Ahora (57 características, mismo peso cada grupo) | **61 %** | **75 %** (30) | **4 de 5** |
+
+La mejora por canción es de una sola canción, y con 40 canciones eso está dentro de lo que puede
+cambiar por azar. La mejora por fragmento (953 fragmentos) y en la balada es más clara. Se
+probaron también 12 características de **timbre** (centroide espectral, planitud, energía en 8
+bandas): según el valor de k daban entre 29 y 32 canciones bien clasificadas, sin una mejora
+consistente, y además el objetivo del proyecto es reconocer el género por el ritmo; no se
+incluyeron.
+
+**Por género** (canciones bien clasificadas): salsa 5/5, reggaetón 5/5, bachata 5/5, balada 4/5,
+electrónica 4/5, cumbia 3/5, rock 2/5 y vallenato 2/5. Los 10 errores
+(`results/clasificacion_canciones.csv`):
 
 | Canción | Real | Predicho | Votos |
 |---|---|---|---|
-| La Gota Fría | vallenato | cumbia | 85 % |
-| Esta Vida | vallenato | reggaetón | 60 % |
-| Olvídala | vallenato | bachata | 38 % |
-| La Pollera Colorá | cumbia | vallenato | 59 % |
-| El Pescador | cumbia | salsa | 54 % |
-| Seven Nation Army | rock | electrónica | 48 % |
-| Don't You Worry Child | electrónica | rock | 23 % |
+| La Gota Fría | vallenato | cumbia | 84 % |
+| Olvídala | vallenato | bachata | 57 % |
+| Esta Vida | vallenato | balada | 30 % |
+| La Pollera Colorá | cumbia | vallenato | 54 % |
+| El Pescador | cumbia | vallenato | 55 % |
+| Back in Black | rock | balada | 46 % |
+| We Will Rock You | rock | salsa | 32 % |
+| Seven Nation Army | rock | electrónica | 31 % |
+| Summer | electrónica | bachata | 54 % |
+| Vivir Así Es Morir de Amor | balada | rock | 41 % |
 
 - **Vallenato y cumbia** se confunden entre sí: son ritmos de la costa caribe con la guacharaca
   marcando las corcheas y tempos parecidos. Además el vallenato es el género más variado de la
   base: sus tempos medidos van de 77 a 132 BPM (7.6). *El Pescador* es una grabación en vivo con
   tambores tradicionales, distinta de las cumbias de estudio de la base.
-- **Rock y electrónica** comparten compás de 4/4, tempo cercano a 125 BPM y bombo en el pulso.
-  *Seven Nation Army* tiene un bombo muy regular, casi electrónico. Para separarlos haría falta el
-  timbre (guitarras frente a sintetizadores), y este sistema mide solo el ritmo a propósito.
+- **El rock** es el que más perdió al agregar la balada: *Back in Black* tiene un tempo lento y
+  ataques espaciados, como una balada, y *We Will Rock You* no tiene batería sino pisotones y
+  palmadas. *Seven Nation Army* tiene un bombo muy regular, casi electrónico. Tres de los errores
+  (*Esta Vida*, *We Will Rock You*, *Seven Nation Army*) tienen votos cercanos al 30 %: con más
+  canciones de entrenamiento podrían cambiar.
 
 **Otras formas de describir el ritmo que se probaron:** la autocorrelación muestreada en retardos
 fijos (Dixon et al., 2003) y el espectro de la envolvente en escala logarítmica (Peeters, 2005).
 Las dos tienen la ventaja de no depender del tempo estimado. Con 5 géneros (24 canciones) dieron
-entre 54 y 67 % por canción, frente al 79 % que dieron las 52 características actuales con esos
-mismos 5 géneros, así que no se incluyeron.
+entre 54 y 67 % por canción, frente al 79 % de las características de la Entrega 2 con esos mismos
+5 géneros, así que no se incluyeron.
 
 ![Mapa de características](results/mapa_caracteristicas.png)
 
-Proyección de los 52 valores a 2 dimensiones con análisis de componentes principales (PCA). La
-salsa forma un grupo separado (arriba a la izquierda) y rock y bachata ocupan la parte inferior,
-mientras que vallenato y cumbia se mezclan con los demás, como en la matriz de confusión. En 2 de
-52 dimensiones los grupos se superponen más de lo que los ve el clasificador.
+Proyección de los 57 valores (con los pesos por grupo) a 2 dimensiones con análisis de
+componentes principales (PCA). Se distinguen tres zonas: arriba a la izquierda los géneros con
+pulso regular y caja o güira marcadas (rock, bachata, electrónica); en el centro la salsa; abajo
+a la izquierda reggaetón, cumbia y vallenato, mezclados entre sí, como en la matriz de confusión.
+La balada se dispersa por toda la parte derecha: sus fragmentos se parecen poco entre sí. En 2 de
+57 dimensiones los grupos se superponen más de lo que los ve el clasificador. Dos fragmentos de
+*La Pollera Colorá* (el final, con silencio) quedan fuera del recuadro.
 
 ## 8. Referencias
 
@@ -497,5 +560,7 @@ mientras que vallenato y cumbia se mezclan con los demás, como en la matriz de 
 10. C. R. Harris et al., "Array programming with NumPy," *Nature*, vol. 585, pp. 357–362, 2020.
 11. J. D. Hunter, "Matplotlib: A 2D Graphics Environment," *Computing in Science & Engineering*,
     vol. 9, no. 3, pp. 90–95, 2007.
+12. D. FitzGerald, "Harmonic/Percussive Separation using Median Filtering," in *Proc. 13th Int.
+    Conf. on Digital Audio Effects (DAFx-10)*, Graz, 2010.
 
 **Herramientas:** el código se escribió con apoyo de Claude (Anthropic) como asistente de programación.

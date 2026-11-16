@@ -74,7 +74,11 @@ X(m, k) = Σₙ x[n + m·H] · w[n] · e^(−j2πkn/N)
 | Regularidad | R_b[P] de cada banda | 3 |
 | Posición | fracción del patrón en pulsos (0, 4, 8, 12), contratiempos (2, 6, 10, 14) y semicorcheas (impares) | 9 |
 | Forma | \|DFT₁₆(patrón_b)\|[k] / \|DFT₁₆\|[0], k = 1…8 | 24 |
-| Dinámica | desviación estándar del RMS en dB, ventanas de 0,5 s | 1 |
+| Dinámica | desviación estándar del RMS en dB, ventanas de 0,5 s (piso de −60 dBFS) | 1 |
+| Percusividad | Σ M·\|X\|² / Σ \|X\|² en cada banda, con M = P²/(H² + P²), H = mediana de \|X\| en 17 tramas (tiempo), P = mediana en 17 bins (frecuencia) | 3 |
+| Fuerza | media de Σ_k máx(0, ΔL) dividida por la media de Σ_k L, con L = log(1 + 100\|X\|) | 1 |
+| Rango dinámico | percentil 90 − percentil 10 del RMS en dB (ventanas de 0,5 s, piso −60 dBFS) | 1 |
+|  | **Total** | **57** |
 
 La |DFT| del patrón es invariante al desplazamiento circular: si p[n] → p[(n − n₀) mod 16],
 entonces X[k] → X[k]·e^(−j2πkn₀/16) y |X[k]| no cambia.
@@ -82,16 +86,23 @@ entonces X[k] → X[k]·e^(−j2πkn₀/16) y |X[k]| no cambia.
 ## 7. Clasificador (`src/clasificador.py`)
 
 - Estandarización z = (v − μ)/σ con μ y σ del entrenamiento.
+- Peso por grupo: cada característica estandarizada se multiplica por 1/√n, donde n es el tamaño
+  de su grupo (tempo; claridad y subdivisión; energía, densidad y regularidad; posición; forma;
+  dinámica; percusividad; fuerza y rango). Así la contribución esperada de cada grupo a d² es la
+  misma y los 24 valores de |DFT| no dominan la distancia.
 - k-NN con distancia euclidiana, k = 5, voto ponderado por 1/(d + ε).
+- Para clasificar un archivo que ya está en la base, sus fragmentos se excluyen del
+  entrenamiento.
 - Canción: suma de los votos normalizados de sus fragmentos.
 - Validación dejando una canción por fuera; se reporta exactitud por fragmento y por canción,
   matriz de confusión y comparación por grupos de características.
 
-## 8. Limitaciones observadas con las 34 canciones
+## 8. Limitaciones observadas con las 40 canciones
 
 - **Octava del tempo:** la salsa se mide siempre a la mitad (~100 en vez de ~200 BPM), lo que no
   afecta porque es consistente; el vallenato se mide unas veces a la mitad (~77 BPM) y otras no
-  (~132 BPM), y esa inconsistencia contribuye a que sea el género peor clasificado (2 de 5).
+  (~132 BPM), y esa inconsistencia contribuye a que sea uno de los géneros peor clasificados
+  (2 de 5). La balada, con el pulso menos claro (R[P] = 0,29), va de 67 a 132 BPM.
 - **Géneros con la misma base rítmica:** vallenato y cumbia (guacharaca en corcheas, 2/4) y rock
   y electrónica (4/4, bombo en el pulso, ~125 BPM) se confunden. Distinguirlos mejor requiere
   describir la subdivisión con más detalle o, para rock y electrónica, el timbre.
@@ -101,8 +112,16 @@ entonces X[k] → X[k]·e^(−j2πkn₀/16) y |X[k]| no cambia.
   canción) tienen fragmentos de dos estilos; la votación por canción lo compensa en parte.
 - **Grabaciones saturadas o antiguas** (*Periódico de Ayer*: 1,8 % de muestras recortadas, casi
   mono) no afectaron la clasificación, pero sí cambian la caracterización (RMS y cresta).
-- **Tamaño de la base:** con 4–5 canciones por género, cada canción equivale a 3 puntos de
+- **Balada y rock:** una balada con batería suave y un rock lento tienen patrones parecidos
+  (golpes en 2 y 4). La percusividad y la fuerza de los ataques ayudan (la balada pasó de 2 a 4
+  de 5), pero el rock bajó a 2 de 5.
+- **Silencio al final:** un fragmento de *La Pollera Colorá* incluye varios segundos de
+  silencio digital; con el piso de −60 dBFS ya no distorsiona la dinámica, pero sigue siendo un
+  fragmento atípico.
+- **Tamaño de la base:** con 5 canciones por género, cada canción equivale a 2,5 puntos de
   exactitud; los resultados deben leerse con ese margen.
 - **Formas alternativas probadas:** autocorrelación en retardos fijos (Dixon et al., 2003) y
   espectro de la envolvente en escala logarítmica (Peeters, 2005); con 5 géneros dieron 54–67 %
-  por canción, frente al 79 % que dieron las 52 características actuales con esos mismos 5 géneros.
+  por canción, frente al 79 % que dieron las 52 características de la Entrega 2 con esos mismos
+  5 géneros. También se probaron 12 características de timbre (centroide, planitud, energía en 8
+  bandas) sobre las 57 actuales: entre 29 y 32 de 40 canciones según k, sin mejora consistente.

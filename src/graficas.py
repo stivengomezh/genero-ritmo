@@ -235,8 +235,9 @@ def graficar_clasificacion(res, nombre_archivo="clasificacion.png", mostrar=Fals
 def graficar_mapa_caracteristicas(datos, clases, nombre_archivo="mapa_caracteristicas.png", mostrar=False):
     """Análisis de componentes principales (PCA): proyecta los vectores estandarizados sobre las
     2 direcciones de mayor varianza (vectores singulares de la matriz de datos)."""
+    from caracteristicas import pesos_por_grupo
     X = datos["X"]
-    Z = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-9)
+    Z = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-9) * pesos_por_grupo()   # el mismo espacio que usa el k-NN
     U, s, Vt = np.linalg.svd(Z, full_matrices=False)
     P = Z @ Vt[:2].T
     var = s ** 2 / np.sum(s ** 2)
@@ -245,10 +246,19 @@ def graficar_mapa_caracteristicas(datos, clases, nombre_archivo="mapa_caracteris
         m = datos["genero"] == g
         ax.scatter(P[m, 0], P[m, 1], s=90 if MARCADOR_GENERO[g] == "*" else 44, c=COLOR_GENERO[g], marker=MARCADOR_GENERO[g], edgecolors=SUPERFICIE,
                    linewidths=0.8, label=nombre_genero(g), alpha=0.9)
+    # ejes ajustados al 99,5 % central de los puntos: unos pocos fragmentos atípicos (p. ej. con
+    # silencio al final de la canción) no deben aplastar el resto de la figura
+    lim = [np.percentile(P[:, j], [0.25, 99.75]) for j in range(2)]
+    lim = [(lo - 0.08 * (hi - lo), hi + 0.08 * (hi - lo)) for lo, hi in lim]
+    fuera = int(np.sum((P[:, 0] < lim[0][0]) | (P[:, 0] > lim[0][1]) | (P[:, 1] < lim[1][0]) | (P[:, 1] > lim[1][1])))
+    ax.set_xlim(*lim[0]); ax.set_ylim(*lim[1])
+    if fuera:
+        ax.text(0.99, 0.01, f"{fuera} fragmento(s) atípico(s) fuera del recuadro", transform=ax.transAxes,
+                ha="right", va="bottom", fontsize=8.5, color=TENUE)
     ax.set_xlabel(f"Componente principal 1 ({var[0]:.0%} de la varianza)")
     ax.set_ylabel(f"Componente principal 2 ({var[1]:.0%} de la varianza)")
     ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), fontsize=9.5)
-    ax.set_title("Cada punto es un fragmento de 10 s. Solo se ven 2 de las 52 dimensiones, por eso los grupos se "
+    ax.set_title(f"Cada punto es un fragmento de 10 s. Solo se ven 2 de las {X.shape[1]} dimensiones, por eso los grupos se "
                  "superponen más que para el clasificador", fontsize=10.5)
     titulo_figura(fig, "Mapa de las características rítmicas (PCA a 2 dimensiones)")
     return terminar(fig, nombre_archivo, mostrar)

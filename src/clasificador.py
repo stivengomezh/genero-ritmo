@@ -2,9 +2,11 @@
 clasificador.py - Primer clasificador de género: k vecinos más cercanos (k-NN).
 
 1. Cada canción se divide en fragmentos de 10 s (solapados 50 %) y cada fragmento se
-   resume en un vector de 52 características rítmicas (caracteristicas.py).
+   resume en un vector de 57 características rítmicas (caracteristicas.py).
 2. Las características se estandarizan: z = (v - media) / desviación, con la media y la
    desviación del conjunto de ENTRENAMIENTO (así ninguna domina por tener números grandes).
+   Luego cada una se multiplica por 1/sqrt(tamaño de su grupo), para que los grupos grandes
+   (24 valores de |DFT| del patrón) no pesen más que los pequeños (tempo, percusividad).
 3. Para un fragmento nuevo se buscan los k fragmentos más cercanos (distancia euclidiana)
    y votan por su género. El género de una canción es el más votado entre sus fragmentos.
 
@@ -22,14 +24,14 @@ import numpy as np
 
 import config as C
 from carga import cargar_audio, fragmentar, fragmentos_para_clasificar, listar_canciones, carpeta_por_defecto
-from caracteristicas import caracteristicas, nombres_caracteristicas
+from caracteristicas import caracteristicas, nombres_caracteristicas, pesos_por_grupo
 
 
 # ============================================================ Conjunto de datos
 def extraer_conjunto(carpeta=None, usar_cache=True):
     """Calcula las características de todos los fragmentos de todas las canciones.
 
-    Devuelve un diccionario con X (fragmentos x 52), genero, cancion, inicio_s y tempo (BPM).
+    Devuelve un diccionario con X (fragmentos x 57), genero, cancion, inicio_s y tempo (BPM).
     Guarda una copia en results/caracteristicas_<carpeta>.npz para no recalcular.
     """
     carpeta = Path(carpeta or carpeta_por_defecto())
@@ -73,9 +75,11 @@ def extraer_conjunto(carpeta=None, usar_cache=True):
 
 # ============================================================ k-NN
 class KNN:
-    def __init__(self, k=C.K_VECINOS, columnas=None):
+    def __init__(self, k=C.K_VECINOS, columnas=None, pesos=None):
         self.k = k
         self.columnas = columnas            # subconjunto de características (None = todas)
+        w = pesos_por_grupo() if pesos is None else np.asarray(pesos, dtype=float)
+        self.pesos = w if columnas is None else w[columnas]
 
     def _sel(self, X):
         return X if self.columnas is None else X[:, self.columnas]
@@ -84,13 +88,13 @@ class KNN:
         X = self._sel(X)
         self.media = X.mean(axis=0)
         self.desv = X.std(axis=0) + 1e-9
-        self.X = (X - self.media) / self.desv
+        self.X = (X - self.media) / self.desv * self.pesos
         self.y = np.asarray(y)
         return self
 
     def votos(self, X):
         """Para cada fragmento: {género: peso}, con peso = 1/(distancia + ε) de los k vecinos."""
-        Z = (self._sel(X) - self.media) / self.desv
+        Z = (self._sel(X) - self.media) / self.desv * self.pesos
         D = np.sqrt(((Z[:, None, :] - self.X[None, :, :]) ** 2).sum(axis=2))
         k = min(self.k, len(self.y))
         vecinos = np.argsort(D, axis=1)[:, :k]
@@ -149,6 +153,7 @@ GRUPOS = {
     "Tempo y subdivisión (autocorrelación)": lambda n: [i for i, x in enumerate(n) if x.startswith(("tempo", "claridad", "R_"))],
     "Energía, densidad y regularidad por banda": lambda n: [i for i, x in enumerate(n) if x.startswith(("energia", "densidad", "regularidad"))],
     "Patrón de compás (posición y |DFT|)": lambda n: [i for i, x in enumerate(n) if x.startswith(("pulso", "contratiempo", "semicorchea", "dft"))],
+    "Intensidad (dinámica, percusividad, fuerza)": lambda n: [i for i, x in enumerate(n) if x.startswith(("dinamica", "percusividad", "fuerza", "rango"))],
     "Todas las características": lambda n: list(range(len(n))),
 }
 
