@@ -235,9 +235,8 @@ def graficar_clasificacion(res, nombre_archivo="clasificacion.png", mostrar=Fals
 def graficar_mapa_caracteristicas(datos, clases, nombre_archivo="mapa_caracteristicas.png", mostrar=False):
     """Análisis de componentes principales (PCA): proyecta los vectores estandarizados sobre las
     2 direcciones de mayor varianza (vectores singulares de la matriz de datos)."""
-    from caracteristicas import pesos_por_grupo
     X = datos["X"]
-    Z = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-9) * pesos_por_grupo()   # el mismo espacio que usa el k-NN
+    Z = (X - X.mean(axis=0)) / (X.std(axis=0) + 1e-9)   # el mismo espacio que usa el k-NN
     U, s, Vt = np.linalg.svd(Z, full_matrices=False)
     P = Z @ Vt[:2].T
     var = s ** 2 / np.sum(s ** 2)

@@ -86,42 +86,40 @@ entonces X[k] → X[k]·e^(−j2πkn₀/16) y |X[k]| no cambia.
 ## 7. Clasificador (`src/clasificador.py`)
 
 - Estandarización z = (v − μ)/σ con μ y σ del entrenamiento.
-- Peso por grupo: cada característica estandarizada se multiplica por 1/√n, donde n es el tamaño
-  de su grupo (tempo; claridad y subdivisión; energía, densidad y regularidad; posición; forma;
-  dinámica; percusividad; fuerza y rango). Así la contribución esperada de cada grupo a d² es la
-  misma y los 24 valores de |DFT| no dominan la distancia.
+- **Variantes de octava** (`caracteristicas.variantes_octava`): cada fragmento de entrenamiento
+  se guarda tres veces, con el periodo estimado P, con 2P y con P/2. Con cada periodo se
+  recalculan las 51 características que dependen de él (log₂ del tempo, R en las fracciones del
+  periodo, regularidad por banda y patrón de compás); las 6 de intensidad no cambian. μ y σ se
+  calculan solo con las versiones de periodo P. El fragmento de prueba se describe una sola vez,
+  con su periodo estimado.
 - k-NN con distancia euclidiana, k = 5, voto ponderado por 1/(d + ε).
+- Canción: suma de los votos normalizados de sus fragmentos.
 - Para clasificar un archivo que ya está en la base, sus fragmentos se excluyen del
   entrenamiento.
-- Canción: suma de los votos normalizados de sus fragmentos.
 - Validación dejando una canción por fuera; se reporta exactitud por fragmento y por canción,
   matriz de confusión y comparación por grupos de características.
 
-## 8. Limitaciones observadas con las 40 canciones
+## 8. Limitaciones observadas con las 64 canciones
 
-- **Octava del tempo:** la salsa se mide siempre a la mitad (~100 en vez de ~200 BPM), lo que no
-  afecta porque es consistente; el vallenato se mide unas veces a la mitad (~77 BPM) y otras no
-  (~132 BPM), y esa inconsistencia contribuye a que sea uno de los géneros peor clasificados
-  (2 de 5). La balada, con el pulso menos claro (R[P] = 0,29), va de 67 a 132 BPM.
-- **Géneros con la misma base rítmica:** vallenato y cumbia (guacharaca en corcheas, 2/4) y rock
-  y electrónica (4/4, bombo en el pulso, ~125 BPM) se confunden. Distinguirlos mejor requiere
-  describir la subdivisión con más detalle o, para rock y electrónica, el timbre.
+- **Octava del tempo:** la salsa se mide siempre a la mitad (~100 en vez de ~200 BPM); el
+  vallenato, el rock y la balada se miden unas veces a la mitad y otras no. Las variantes de
+  octava lo compensan en buena parte (de 81 a 86 % por canción), pero no eligen la octava
+  correcta: el tempo que se muestra al usuario puede seguir siendo la mitad o el doble.
+- **Vallenato (5 de 8):** es el género más variado de la base (paseo, merengue, vallenato
+  romántico; 77–136 BPM medidos) y comparte base rítmica con la cumbia (guacharaca en corcheas).
+- **Balada (5 de 8):** casi sin percusión; claridad del pulso R[P] = 0,31 frente a 0,43–0,57 de
+  los demás. Sus fragmentos se parecen poco entre sí y los votos de los errores son bajos (27–38 %).
 - **Compases que no son de 4 pulsos** (por ejemplo, música en 3/4 o 6/8) se describen con una
   rejilla incorrecta.
-- **Canciones con cambios de ritmo** (por ejemplo *Tití Me Preguntó*, que cambia a mitad de la
-  canción) tienen fragmentos de dos estilos; la votación por canción lo compensa en parte.
+- **Canciones con cambios de ritmo o tramos sin percusión** (*Tití Me Preguntó*, *Animals*)
+  tienen fragmentos de dos estilos; la votación por canción lo compensa en parte.
 - **Grabaciones saturadas o antiguas** (*Periódico de Ayer*: 1,8 % de muestras recortadas, casi
   mono) no afectaron la clasificación, pero sí cambian la caracterización (RMS y cresta).
-- **Balada y rock:** una balada con batería suave y un rock lento tienen patrones parecidos
-  (golpes en 2 y 4). La percusividad y la fuerza de los ataques ayudan (la balada pasó de 2 a 4
-  de 5), pero el rock bajó a 2 de 5.
-- **Silencio al final:** un fragmento de *La Pollera Colorá* incluye varios segundos de
-  silencio digital; con el piso de −60 dBFS ya no distorsiona la dinámica, pero sigue siendo un
-  fragmento atípico.
-- **Tamaño de la base:** con 5 canciones por género, cada canción equivale a 2,5 puntos de
-  exactitud; los resultados deben leerse con ese margen.
-- **Formas alternativas probadas:** autocorrelación en retardos fijos (Dixon et al., 2003) y
-  espectro de la envolvente en escala logarítmica (Peeters, 2005); con 5 géneros dieron 54–67 %
-  por canción, frente al 79 % que dieron las 52 características de la Entrega 2 con esos mismos
-  5 géneros. También se probaron 12 características de timbre (centroide, planitud, energía en 8
-  bandas) sobre las 57 actuales: entre 29 y 32 de 40 canciones según k, sin mejora consistente.
+- **Silencio al final:** un fragmento de *La Pollera Colorá* incluye varios segundos de silencio
+  digital; el piso de −60 dBFS evita que distorsione la dinámica.
+- **Tamaño de la base:** con 8 canciones por género, cada canción equivale a 1,6 puntos de
+  exactitud. Con k = 3, 5, 7 y 9 el resultado va de 52 a 55 canciones (81–86 %).
+- **Probado y no incluido:** peso 1/√n por grupo de características (ayudaba con 40 canciones,
+  no con 64); 12 características de timbre; autocorrelación en retardos fijos (Dixon et al.,
+  2003) y espectro de la envolvente en escala logarítmica (Peeters, 2005); plegar el tempo a una
+  sola octava.

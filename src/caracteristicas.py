@@ -26,15 +26,15 @@ Todos se calculan a partir de las envolventes de ataques (ritmo.py):
                                                                                 ----------
                                                                                        57
 
-Los grupos tienen tamaños muy distintos (24 valores de |DFT| frente a 1 de tempo); por eso el
-clasificador da a cada grupo el mismo peso total (pesos_por_grupo) y ningún grupo domina.
+Las 51 primeras dependen del periodo del pulso; variantes_octava() las recalcula con el tempo a
+la mitad y al doble para el entrenamiento del clasificador.
 """
 import numpy as np
 from scipy.ndimage import median_filter
 from scipy.signal import find_peaks
 
 import config as C
-from ritmo import analizar_ritmo, autocorrelacion, _interpolar, estimar_tempo
+from ritmo import analizar_ritmo, autocorrelacion, _interpolar, estimar_tempo, patron_compas
 
 FRACCIONES = [(1 / 4, "1/4"), (1 / 3, "1/3"), (1 / 2, "1/2"), (2 / 3, "2/3"), (3 / 4, "3/4"), (3 / 2, "3/2"),
               (2, "2")]
@@ -65,7 +65,11 @@ def pesos_por_grupo(nombres=None):
     """Peso de cada característica = 1 / sqrt(tamaño de su grupo).
 
     En la distancia euclidiana un grupo de n características estandarizadas aporta en
-    promedio n veces más que una sola; con este peso cada grupo aporta lo mismo."""
+    promedio n veces más que una sola; con este peso cada grupo aporta lo mismo.
+
+    OPCIONAL: el clasificador NO lo usa por defecto. Con 40 canciones mejoraba la balada, pero
+    con 64 canciones dio igual o peor que el peso uniforme (README 7.10). Se conserva para
+    poder repetir la comparación: KNN(pesos=pesos_por_grupo())."""
     nombres = nombres or nombres_caracteristicas()
     w = np.ones(len(nombres))
     for prefijos in GRUPOS_PESO:
@@ -137,9 +141,8 @@ def rango_db(y, ventana_s=0.5):
     return float(np.percentile(rms, 90) - np.percentile(rms, 10))
 
 
-def caracteristicas(y, analisis=None):
-    """Devuelve (vector de 57 valores, análisis rítmico completo)."""
-    a = analisis or analizar_ritmo(y)
+def _ritmicas(a):
+    """Las 51 características que dependen del tempo y del patrón de compás."""
     envs, tempo, patron = a["envs"], a["tempo"], a["patron"]
     P, r = tempo["periodo"], tempo["r"]
     v = []
@@ -165,10 +168,48 @@ def caracteristicas(y, analisis=None):
     for i in range(len(C.NOMBRES_BANDA)):
         D = np.abs(np.fft.rfft(patron[i]))     # 9 valores: k = 0..8
         v += list(D[1:9] / (D[0] + 1e-12))
+    return v
+
+
+def caracteristicas(y, analisis=None):
+    """Devuelve (vector de 57 valores, análisis rítmico completo)."""
+    a = analisis or analizar_ritmo(y)
+    v = _ritmicas(a)
     v.append(dinamica_db(y))
     v += percusividad(a["S"], a["f"])
     v += [fuerza_ataques(a["S"]), rango_db(y)]
     return np.nan_to_num(np.array(v, dtype=np.float64)), a
+
+
+def variantes_octava(v, a):
+    """El mismo fragmento descrito como si el pulso fuera la MITAD y el DOBLE del estimado.
+
+    La autocorrelación tiene picos en el pulso, en su mitad y en su doble, y el estimador no
+    siempre elige el mismo en canciones del mismo género (un vallenato puede salir a 77 o a
+    154 BPM). En vez de adivinar la octava correcta, cada fragmento de ENTRENAMIENTO se guarda
+    tres veces: con su tempo, con la mitad y con el doble. Así un fragmento nuevo encuentra
+    vecinos de su género sin importar en qué octava quedó medido.
+
+    Solo cambian las 51 características que dependen del periodo; las de intensidad son iguales.
+    Devuelve (v_mitad_del_tempo, v_doble_del_tempo).
+    """
+    salida = []
+    P = a["tempo"]["periodo"]
+    for factor in (2.0, 0.5):                      # periodo doble = tempo a la mitad
+        if not np.isfinite(P):
+            salida.append(v.copy())
+            continue
+        P2 = P * factor
+        tempo = dict(a["tempo"], periodo=P2, bpm=60 * C.FS_ENV / P2, claridad=_interpolar(a["tempo"]["r"], P2))
+        patron, fase, n = patron_compas(a["envs"], P2)
+        a2 = dict(a, tempo=tempo, patron=patron, fase=fase, n_compases=n)
+        w = v.copy()
+        w[:N_RITMICAS] = np.nan_to_num(np.array(_ritmicas(a2), dtype=np.float64))
+        salida.append(w)
+    return tuple(salida)
+
+
+N_RITMICAS = 51   # tempo(1) + claridad y subdivisión(8) + bandas(9) + posición(9) + |DFT|(24)
 
 
 def tempo_rapido(y):

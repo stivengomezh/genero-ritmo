@@ -5,8 +5,8 @@ clasificador.py - Primer clasificador de género: k vecinos más cercanos (k-NN)
    resume en un vector de 57 características rítmicas (caracteristicas.py).
 2. Las características se estandarizan: z = (v - media) / desviación, con la media y la
    desviación del conjunto de ENTRENAMIENTO (así ninguna domina por tener números grandes).
-   Luego cada una se multiplica por 1/sqrt(tamaño de su grupo), para que los grupos grandes
-   (24 valores de |DFT| del patrón) no pesen más que los pequeños (tempo, percusividad).
+   Cada fragmento de entrenamiento se guarda además con el tempo a la mitad y al doble
+   (caracteristicas.variantes_octava), porque el estimador no siempre elige la misma octava.
 3. Para un fragmento nuevo se buscan los k fragmentos más cercanos (distancia euclidiana)
    y votan por su género. El género de una canción es el más votado entre sus fragmentos.
 
@@ -24,14 +24,16 @@ import numpy as np
 
 import config as C
 from carga import cargar_audio, fragmentar, fragmentos_para_clasificar, listar_canciones, carpeta_por_defecto
-from caracteristicas import caracteristicas, nombres_caracteristicas, pesos_por_grupo
+from caracteristicas import caracteristicas, nombres_caracteristicas, pesos_por_grupo, variantes_octava
 
 
 # ============================================================ Conjunto de datos
 def extraer_conjunto(carpeta=None, usar_cache=True):
     """Calcula las características de todos los fragmentos de todas las canciones.
 
-    Devuelve un diccionario con X (fragmentos x 57), genero, cancion, inicio_s y tempo (BPM).
+    Devuelve un diccionario con X (fragmentos x 57), X_mitad y X_doble (los mismos fragmentos
+    descritos con el tempo a la mitad y al doble, ver caracteristicas.variantes_octava),
+    genero, cancion, inicio_s y tempo (BPM).
     Guarda una copia en results/caracteristicas_<carpeta>.npz para no recalcular.
     """
     carpeta = Path(carpeta or carpeta_por_defecto())
@@ -46,26 +48,29 @@ def extraer_conjunto(carpeta=None, usar_cache=True):
     firma = hashlib.sha1(codigo).hexdigest()[:12] + ";" + ";".join(f"{p.name}:{p.stat().st_size}" for p, _ in canciones)
     if usar_cache and cache.exists():
         d = np.load(cache, allow_pickle=False)
-        if str(d["firma"]) == firma and d["X"].shape[1] == len(nombres_caracteristicas()):
+        if str(d["firma"]) == firma and "X_mitad" in d.files and d["X"].shape[1] == len(nombres_caracteristicas()):
             print(f"Características leídas de {cache.name} ({len(d['X'])} fragmentos)")
-            return {k: d[k] for k in ("X", "genero", "cancion", "inicio_s", "tempo")}
+            return {k: d[k] for k in CLAVES}
 
     print(f"Extrayendo características de {len(canciones)} canciones de {carpeta}")
-    X, gen, can, ini, tem = [], [], [], [], []
+    X, Xm, Xd, gen, can, ini, tem = [], [], [], [], [], [], []
     t0 = time.perf_counter()
     for ruta, genero in canciones:
         y = cargar_audio(ruta)
         frags = fragmentos_para_clasificar(y)
         for inicio, fragmento in frags:
             v, a = caracteristicas(fragmento)
+            mitad, doble = variantes_octava(v, a)
             X.append(v)
+            Xm.append(mitad)
+            Xd.append(doble)
             gen.append(genero)
             can.append(ruta.stem)
             ini.append(inicio)
             tem.append(a["tempo"]["bpm"])
         print(f"  {ruta.name:<28} {len(y) / C.SR:6.1f} s  {len(frags):3d} fragmentos  "
               f"tempo mediano {np.median(tem[-len(frags):]):6.1f} BPM")
-    datos = {"X": np.array(X), "genero": np.array(gen), "cancion": np.array(can), "inicio_s": np.array(ini),
+    datos = {"X": np.array(X), "X_mitad": np.array(Xm), "X_doble": np.array(Xd), "genero": np.array(gen), "cancion": np.array(can), "inicio_s": np.array(ini),
              "tempo": np.array(tem)}
     C.CARPETA_RESULTADOS.mkdir(exist_ok=True)
     np.savez(cache, firma=firma, **datos)
@@ -73,29 +78,45 @@ def extraer_conjunto(carpeta=None, usar_cache=True):
     return datos
 
 
+CLAVES = ("X", "X_mitad", "X_doble", "genero", "cancion", "inicio_s", "tempo")
+
+
+def variantes(datos, filas=slice(None)):
+    """Matrices con el tempo a la mitad y al doble, para agregar al entrenamiento."""
+    return [datos[k][filas] for k in ("X_mitad", "X_doble") if k in datos]
+
+
 # ============================================================ k-NN
 class KNN:
     def __init__(self, k=C.K_VECINOS, columnas=None, pesos=None):
         self.k = k
         self.columnas = columnas            # subconjunto de características (None = todas)
-        w = pesos_por_grupo() if pesos is None else np.asarray(pesos, dtype=float)
+        # pesos opcionales por característica (por defecto todas pesan igual; se probó
+        # caracteristicas.pesos_por_grupo y con 64 canciones no mejoró, ver README 7.10)
+        w = np.ones(len(nombres_caracteristicas())) if pesos is None else np.asarray(pesos, dtype=float)
         self.pesos = w if columnas is None else w[columnas]
 
     def _sel(self, X):
         return X if self.columnas is None else X[:, self.columnas]
 
-    def entrenar(self, X, y):
+    def entrenar(self, X, y, variantes=()):
+        """`variantes`: matrices con las mismas filas que X (tempo a la mitad y al doble) que
+        se agregan como ejemplos adicionales del mismo género. La media y la desviación se
+        calculan solo con X (los tempos realmente medidos)."""
         X = self._sel(X)
         self.media = X.mean(axis=0)
         self.desv = X.std(axis=0) + 1e-9
-        self.X = (X - self.media) / self.desv * self.pesos
-        self.y = np.asarray(y)
+        # una variante igual a X (columnas que no dependen del tempo) solo repetiría vecinos
+        extra = [V for V in (self._sel(V) for V in variantes) if not np.array_equal(V, X)]
+        self.X = (np.vstack([X] + extra) - self.media) / self.desv * self.pesos
+        self.y = np.concatenate([np.asarray(y)] * (1 + len(extra)))
         return self
 
     def votos(self, X):
         """Para cada fragmento: {género: peso}, con peso = 1/(distancia + ε) de los k vecinos."""
         Z = (self._sel(X) - self.media) / self.desv * self.pesos
-        D = np.sqrt(((Z[:, None, :] - self.X[None, :, :]) ** 2).sum(axis=2))
+        d2 = (Z ** 2).sum(axis=1)[:, None] - 2 * Z @ self.X.T + (self.X ** 2).sum(axis=1)[None, :]
+        D = np.sqrt(np.maximum(d2, 0))
         k = min(self.k, len(self.y))
         vecinos = np.argsort(D, axis=1)[:, :k]
         salida = []
@@ -129,7 +150,7 @@ def validar(datos, k=C.K_VECINOS, columnas=None):
     filas_cancion = []
     for nombre in np.unique(can):
         prueba = can == nombre
-        modelo = KNN(k, columnas).entrenar(X[~prueba], gen[~prueba])
+        modelo = KNN(k, columnas).entrenar(X[~prueba], gen[~prueba], variantes(datos, ~prueba))
         votos = modelo.votos(X[prueba])
         pred_frag[prueba] = [v.most_common(1)[0][0] for v in votos]
         g_pred, prob = votar_cancion(votos)
@@ -211,11 +232,8 @@ def clasificar_senal(y, carpeta=None, k=C.K_VECINOS, datos=None, excluir=None):
     Así una canción que ya está en la base no se predice a sí misma.
     """
     datos = datos or extraer_conjunto(carpeta)
-    X, gen = datos["X"], datos["genero"]
-    if excluir is not None:
-        keep = datos["cancion"] != excluir
-        X, gen = X[keep], gen[keep]
-    modelo = KNN(k).entrenar(X, gen)
+    keep = np.ones(len(datos["X"]), dtype=bool) if excluir is None else datos["cancion"] != excluir
+    modelo = KNN(k).entrenar(datos["X"][keep], datos["genero"][keep], variantes(datos, keep))
     frags = fragmentar(y)
     vectores, tempos = [], []
     for _, f in frags:
