@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini-Shazam · Género musical por el ritmo</title>
+<style>
+  :root {
+    --tinta: #003333;          /* verde oscuro del logo de la Universidad de Manizales */
+    --acento: #00936f;         /* verde del botón principal */
+    --acento-2: #35c39a;
+    --fondo: #f2f6f4;
+    --tarjeta: #ffffff;
+    --suave: #56706c;
+    --linea: #dbe6e2;
+    --error: #c0392b;
+    --radio: 18px;
+    --sombra: 0 10px 30px rgba(16, 35, 63, .10);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--fondo); color: var(--tinta); line-height: 1.45;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- cabecera con la foto del campus ---------- */
+  .portada {
+    position: relative; color: #fff; overflow: hidden;
+    padding: 22px 16px 128px;
+    background: linear-gradient(120deg, #002424 0%, #003d3a 55%, #00574f 100%);
+  }
+  .portada .foto {             /* la foto ocupa el lado derecho y se funde con el verde */
+    position: absolute; top: 0; right: 0; height: 100%; width: 44%; object-fit: cover; object-position: 50% 42%;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+            mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+    opacity: .92;
+  }
+  .portada::after {            /* velo inferior, para que la tarjeta se separe de la foto */
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 45%;
+    background: linear-gradient(180deg, rgba(0, 30, 30, 0) 0%, rgba(0, 30, 30, .55) 100%); pointer-events: none;
+  }
+  .contenido { position: relative; z-index: 2; max-width: 980px; margin: 0 auto; }
+  .barra { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 30px; }
+  .institucion { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .institucion img { height: 78px; width: auto; }
+  .institucion .texto { font-size: 13.5px; line-height: 1.35; opacity: .92; }
+  .institucion .texto b { display: block; font-size: 15.5px; }
+  .base { font-size: 12.5px; background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22); padding: 6px 12px; border-radius: 99px; white-space: nowrap; backdrop-filter: blur(4px); }
+  .marca {
+    font-size: clamp(44px, 8vw, 76px); font-weight: 800; letter-spacing: -1.5px; margin: 0; line-height: 1;
+    text-shadow: 0 4px 24px rgba(0, 0, 0, .35);
+  }
+  .marca span { color: var(--acento-2); }
+  .lema { font-size: clamp(15px, 2.2vw, 19px); margin: 12px 0 0; max-width: 520px; opacity: .95; }
+  @media (max-width: 760px) {
+    .portada { text-align: center; }
+    .portada .foto { width: 100%; opacity: .38; -webkit-mask-image: none; mask-image: none; }
+    .barra { justify-content: center; } .institucion { flex-direction: column; text-align: center; gap: 8px; }
+    .lema { margin-left: auto; margin-right: auto; }
+  }
+
+  /* ---------- tarjeta principal ---------- */
+  main { flex: 1; width: 100%; max-width: 980px; margin: -86px auto 0; padding: 0 16px 40px; position: relative; z-index: 3; }
+  .tarjeta { background: var(--tarjeta); border-radius: var(--radio); box-shadow: var(--sombra); padding: 28px; }
+  .escucha { text-align: center; }
+  .boton-escuchar {
+    position: relative; width: 150px; height: 150px; border-radius: 50%; border: 0; color: #fff;
+    background: radial-gradient(circle at 30% 25%, #3fd3a8, var(--acento) 60%, #006b52);
+    box-shadow: 0 14px 34px rgba(0, 147, 111, .42); transition: transform .15s;
+    display: inline-grid; place-items: center; margin: 26px 0 22px;
+  }
+  .boton-escuchar:hover { transform: scale(1.04); }
+  .boton-escuchar:active { transform: scale(.97); }
+  .boton-escuchar svg { width: 62px; height: 62px; }
+  .boton-escuchar::before, .boton-escuchar::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--acento); opacity: 0;
+  }
+  .grabando .boton-escuchar { background: radial-gradient(circle at 30% 25%, #ff7a6b, #e0352b 60%, #a81f17); box-shadow: 0 14px 34px rgba(224, 53, 43, .42); }
+  .grabando .boton-escuchar::before, .grabando .boton-escuchar::after { border-color: #e0352b; animation: onda 1.6s ease-out infinite; }
+  .grabando .boton-escuchar::after { animation-delay: .8s; }
+  @keyframes onda { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.3); opacity: 0; } }
+  .cuenta { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .titulo-accion { font-size: 20px; font-weight: 700; margin: 0 0 2px; }
+  .ayuda { color: var(--suave); font-size: 14.5px; margin: 0 auto; max-width: 520px; }
+  .nivel { height: 8px; width: min(320px, 80%); margin: 14px auto 0; background: var(--linea); border-radius: 99px; overflow: hidden; display: none; }
+  .nivel i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--acento-2), #f2a541, #e0352b); transition: width .08s; }
+  .grabando .nivel { display: block; }
+  .opciones { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: center; margin-top: 20px; }
+  .secundario {
+    border: 1.5px solid var(--linea); background: #fff; color: var(--tinta); border-radius: 12px; padding: 11px 18px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .secundario:hover { border-color: var(--acento); color: var(--acento); }
+  select.secundario { appearance: auto; padding-right: 10px; }
+  .soltar { outline: 3px dashed var(--acento); outline-offset: -10px; }
+  .analizando .boton-escuchar { background: #b9cdc7; box-shadow: none; pointer-events: none; }
+  .giro { width: 56px; height: 56px; border-radius: 50%; border: 6px solid rgba(255, 255, 255, .5); border-top-color: #fff; animation: giro .9s linear infinite; }
+  @keyframes giro { to { transform: rotate(360deg); } }
+  .aviso { margin: 18px auto 0; max-width: 560px; padding: 12px 16px; border-radius: 12px; font-size: 14.5px; text-align: left; }
+  .aviso.error { background: #fdecea; color: var(--error); }
+  .aviso.nota { background: #e8f5f0; color: #0b5a48; }
+  [hidden] { display: none !important; }
+
+  /* ---------- resultado ---------- */
+  .resultado { margin-top: 22px; }
+  .veredicto { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 28px; padding-bottom: 22px; border-bottom: 1px solid var(--linea); }
+  .insignia { width: 92px; height: 92px; border-radius: 24px; display: grid; place-items: center; color: #fff; font-size: 40px; font-weight: 800; flex: none; }
+  .veredicto .etiqueta { font-size: 13px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--suave); font-weight: 600; }
+  .veredicto h2 { margin: 0; font-size: clamp(36px, 7vw, 58px); line-height: 1.05; letter-spacing: -1px; }
+  .veredicto .archivo { color: var(--suave); font-size: 14px; word-break: break-word; }
+  .datos { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  .dato { background: var(--fondo); border-radius: 14px; padding: 10px 14px; text-align: center; min-width: 88px; flex: 1; }
+  .dato b { display: block; font-size: clamp(19px, 5.4vw, 24px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dato span { font-size: 12px; color: var(--suave); }
+  .columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 24px; }
+  @media (max-width: 760px) { .columnas { grid-template-columns: 1fr; } .datos { margin-left: 0; width: 100%; } .base { display: none; } }
+  h3 { font-size: 15px; margin: 0 0 4px; }
+  .explica { font-size: 13px; color: var(--suave); margin: 0 0 12px; }
+  .voto { display: grid; grid-template-columns: 96px 1fr 54px; align-items: center; gap: 10px; margin: 7px 0; font-size: 14.5px; }
+  .voto .barra-voto { height: 14px; background: var(--fondo); border-radius: 99px; overflow: hidden; }
+  .voto .barra-voto i { display: block; height: 100%; border-radius: 99px; width: 0; transition: width .7s cubic-bezier(.2, .8, .2, 1); }
+  .voto .pct { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--suave); }
+  .voto.primero { font-weight: 700; } .voto.primero .pct { color: var(--tinta); }
+  .tira { display: flex; gap: 3px; height: 30px; }
+  .tira i { flex: 1; border-radius: 5px; min-width: 4px; }
+  .eje { display: flex; justify-content: space-between; font-size: 12px; color: var(--suave); margin-top: 4px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--suave); margin-top: 10px; }
+  .leyenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; }
+  .patron { display: grid; grid-template-columns: 62px repeat(16, 1fr); gap: 3px; align-items: center; margin-top: 4px; }
+  .patron .fila { font-size: 12.5px; color: var(--suave); }
+  .patron .celda { aspect-ratio: 1; border-radius: 4px; background: var(--acento); min-height: 12px; }
+  .patron .num { font-size: 10.5px; color: var(--suave); text-align: center; }
+  .patron .pulso { font-weight: 700; color: var(--tinta); }
+  .bloque { margin-top: 26px; }
+
+  footer { text-align: center; font-size: 13px; color: var(--suave); padding: 0 16px 28px; }
+  footer b { color: var(--tinta); }
+</style>
+</head>
+<body>
+
+<header class="portada" id="portada">
+  <img class="foto" src="img/campus.jpg" alt="Campus de la Universidad de Manizales" id="foto" hidden>
+  <div class="contenido">
+    <div class="barra">
+      <div class="institucion">
+        <img src="img/logo_blanco.png" alt="Universidad de Manizales" id="logo" hidden>
+        <div class="texto"><b>Teoría de Señales</b>Proyecto semestral · Ingeniería de Sistemas y Telecomunicaciones</div>
+      </div>
+      <div class="base" id="base"></div>
+    </div>
+    <h1 class="marca">Mini<span>-</span>Shazam</h1>
+    <p class="lema">Reconoce el género musical de una canción a partir de su ritmo, con 10 segundos de audio.</p>
+  </div>
+</header>
+
+<main>
+  <section class="tarjeta escucha" id="zona">
+    <button class="boton-escuchar" id="escuchar" aria-label="Escuchar con el micrófono">
+      <svg id="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5v4M8.5 21.5h7"/>
+      </svg>
+      <span class="cuenta" id="cuenta" hidden></span>
+      <span class="giro" id="giro" hidden></span>
+    </button>
+    <div class="titulo-accion" id="titulo">Toca para escuchar</div>
+    <p class="ayuda" id="ayuda">Pon a sonar una canción cerca del micrófono. También puedes subir un archivo de audio o arrastrarlo aquí.</p>
+    <div class="nivel"><i id="nivel"></i></div>
+    <div class="opciones" id="opciones">
+      <label class="secundario" for="segundos" style="gap:6px">Grabar
+        <select id="segundos" class="secundario" style="border:0;padding:0 2px">
+          <option value="10">10 s</option><option value="15" selected>15 s</option><option value="20">20 s</option><option value="30">30 s</option>
+        </select>
+      </label>
+      <button class="secundario" id="subir">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+        Subir un archivo
+      </button>
+      <input type="file" id="archivo" accept="audio/*,.mp3,.wav,.flac,.ogg,.m4a" hidden>
+    </div>
+    <div class="aviso error" id="error" hidden></div>
+  </section>
+
+  <section class="tarjeta resultado" id="resultado" hidden>
+    <div class="veredicto">
+      <div class="insignia" id="insignia"></div>
+      <div>
+        <div class="etiqueta">Género identificado</div>
+        <h2 id="genero"></h2>
+        <div class="archivo" id="nombre"></div>
+      </div>
+      <div class="datos">
+        <div class="dato"><b id="confianza"></b><span>de los votos</span></div>
+        <div class="dato"><b id="tempo"></b><span>BPM</span></div>
+        <div class="dato"><b id="nfrag"></b><span id="nfrag-texto">fragmentos</span></div>
+      </div>
+    </div>
+    <div class="aviso nota" id="nota" hidden></div>
+
+    <div class="columnas">
+      <div>
+        <h3>Votos por género</h3>
+        <p class="explica">Cada fragmento de 10 s vota por los géneros de sus 5 vecinos más parecidos en la base.</p>
+        <div id="votos"></div>
+      </div>
+      <div>
+        <h3>Fragmento por fragmento</h3>
+        <p class="explica">El género más votado en cada fragmento, a lo largo del audio.</p>
+        <div class="tira" id="tira"></div>
+        <div class="eje"><span id="eje-ini">0 s</span><span id="eje-fin"></span></div>
+        <div class="leyenda" id="leyenda"></div>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <h3>Patrón de compás</h3>
+      <p class="explica">Dónde caen los golpes dentro de un compás de 4 pulsos (16 semicorcheas), por banda de frecuencia. Más intenso = golpe más fuerte. Es la "huella" rítmica que más ayuda a distinguir los géneros.</p>
+      <div class="patron" id="patron"></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <img src="img/logo.png" alt="Universidad de Manizales" style="height:64px;display:block;margin:0 auto 12px" onerror="this.remove()">
+  <b>Stiven Gómez Henao · Manuel Leonardo Díaz Castaño · Juan José Arciniegas Castillo</b><br>
+  Ingeniería de Sistemas y Telecomunicaciones · Universidad de Manizales · <span id="pie-base"></span>
+</footer>
+
+<script>
+const COLOR = { salsa: "#e4572e", reggaeton: "#f2a541", bachata: "#c9427b", vallenato: "#2e9e6b",
+                cumbia: "#1f9bb5", rock: "#4b5d7a", electronica: "#7b4bd6", balada: "#4a7fd4" };
+const BANDA = { graves: "Graves", medios: "Medios", agudos: "Agudos" };
+const $ = id => document.getElementById(id);
+const zona = $("zona");
+let ocupado = false, parar = null;
+
+// Las imágenes son opcionales: si no están en web/img/, la página se ve igual sin ellas.
+for (const id of ["logo", "foto"]) {
+  const img = $(id);
+  const listo = () => { img.hidden = false; };
+  if (img.complete && img.naturalWidth) listo(); else img.addEventListener("load", listo);
+}
+
+fetch("api/estado").then(r => r.json()).then(e => {
+  const texto = `${e.canciones} canciones · ${e.generos.length} géneros`;
+  $("base").textContent = "Base: " + texto;
+  $("pie-base").textContent = "Base de " + texto + (e.sinteticos ? " (ritmos sintéticos de prueba)" : "");
+}).catch(() => {});
+
+function estado(modo, titulo, ayuda) {
+  zona.classList.remove("grabando", "analizando");
+  if (modo) zona.classList.add(modo);
+  $("icono").style.display = modo ? "none" : "";
+  $("cuenta").hidden = modo !== "grabando";
+  $("giro").hidden = modo !== "analizando";
+  $("opciones").hidden = !!modo;
+  $("titulo").textContent = titulo;
+  $("ayuda").textContent = ayuda;
+  ocupado = modo === "analizando";
+}
+function reposo() {
+  estado(null, "Toca para escuchar", "Pon a sonar una canción cerca del micrófono. También puedes subir un archivo de audio o arrastrarlo aquí.");
+}
+function error(mensaje) { reposo(); $("error").textContent = mensaje; $("error").hidden = false; }
+
+// ---------- enviar el audio al programa en Python ----------
+async function enviar(datos, nombre) {
+  $("error").hidden = true;
+  estado("analizando", "Analizando el ritmo…", "Espectrograma, envolvente de ataques, tempo y patrón de compás. Una canción completa tarda unos segundos.");
+  try {
+    const r = await fetch("api/clasificar", { method: "POST", body: datos,
+      headers: { "Content-Type": "application/octet-stream", "X-Nombre": encodeURIComponent(nombre) } });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error || "Error del servidor");
+    reposo(); mostrar(j);
+  } catch (e) {
+    error(e.message === "Failed to fetch" ? "No hay conexión con el programa. ¿Sigue abierto «python main.py web» en la terminal?" : e.message);
+  }
+}
+
+// ---------- micrófono: se captura la señal sin procesar y se arma un WAV de 16 bits ----------
+async function grabar() {
+  $("error").hidden = true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+    return error("Este navegador no permite usar el micrófono. Abra la página en Chrome, Edge o Firefox con la dirección http://127.0.0.1:8000.");
+  let flujo;
+  try {
+    // sin cancelación de eco ni reducción de ruido: esos filtros están hechos para voz y deforman la música
+    flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  } catch (e) {
+    return error("No se pudo usar el micrófono. Permita el acceso cuando el navegador lo pregunte (icono del candado, junto a la dirección).");
+  }
+  const total = +$("segundos").value;
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const fuente = ctx.createMediaStreamSource(flujo);
+  const nodo = ctx.createScriptProcessor(4096, 1, 1);
+  const silencio = ctx.createGain(); silencio.gain.value = 0;      // para que no suene por los parlantes
+  const trozos = []; let muestras = 0, pico = 0, cancelado = false;
+  nodo.onaudioprocess = ev => {
+    const x = ev.inputBuffer.getChannelData(0);
+    trozos.push(new Float32Array(x)); muestras += x.length;
+    let m = 0; for (let i = 0; i < x.length; i += 8) m = Math.max(m, Math.abs(x[i]));
+    pico = Math.max(pico, m);
+    $("nivel").style.width = Math.min(100, m * 160) + "%";
+  };
+  fuente.connect(nodo); nodo.connect(silencio); silencio.connect(ctx.destination);
+
+  estado("grabando", "Escuchando…", "Acerca el micrófono a la música. Toca el botón para detener antes de tiempo.");
+  const inicio = performance.now();
+  await new Promise(fin => {
+    const reloj = setInterval(() => {
+      const quedan = total - (performance.now() - inicio) / 1000;
+      $("cuenta").textContent = Math.max(0, Math.ceil(quedan));
+      if (quedan <= -0.4) { clearInterval(reloj); fin(); }      // un poco más, para completar el último fragmento
+    }, 100);
+    $("cuenta").textContent = total;
+    parar = () => { clearInterval(reloj); fin(); };
+  });
+  parar = null;
+  nodo.disconnect(); fuente.disconnect(); flujo.getTracks().forEach(t => t.stop());
+  const fs = ctx.sampleRate; ctx.close();
+  $("nivel").style.width = "0";
+  if (muestras < fs * 3) return error("La grabación fue muy corta. Se necesitan al menos 3 segundos; lo ideal son 10 o más.");
+  if (pico < 0.01) return error("El micrófono casi no captó sonido. Suba el volumen de la música o revise que el micrófono correcto esté activo.");
+
+  // WAV PCM de 16 bits, mono
+  const buf = new ArrayBuffer(44 + muestras * 2), v = new DataView(buf);
+  const txt = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  txt(0, "RIFF"); v.setUint32(4, 36 + muestras * 2, true); txt(8, "WAVEfmt "); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, fs, true); v.setUint32(28, fs * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true); txt(36, "data"); v.setUint32(40, muestras * 2, true);
+  let o = 44;
+  for (const t of trozos) for (let i = 0; i < t.length; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, t[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  enviar(buf, "microfono.wav");
+}
+
+$("escuchar").addEventListener("click", () => { if (parar) parar(); else if (!ocupado) grabar(); });
+$("subir").addEventListener("click", () => $("archivo").click());
+$("archivo").addEventListener("change", ev => { const f = ev.target.files[0]; ev.target.value = ""; if (f) enviar(f, f.name); });
+["dragenter", "dragover"].forEach(t => zona.addEventListener(t, ev => { ev.preventDefault(); zona.classList.add("soltar"); }));
+["dragleave", "drop"].forEach(t => zona.addEventListener(t, ev => { ev.preventDefault(); zona.classList.remove("soltar"); }));
+zona.addEventListener("drop", ev => { const f = ev.dataTransfer.files[0]; if (f && !ocupado && !parar) enviar(f, f.name); });
+
+// ---------- dibujar el resultado ----------
+function mostrar(j) {
+  const color = COLOR[j.genero] || "#00936f";
+  $("resultado").hidden = false;
+  $("insignia").style.background = color;
+  $("insignia").textContent = j.nombre_genero[0];
+  $("genero").textContent = j.nombre_genero; $("genero").style.color = color;
+  $("nombre").textContent = (j.nombre === "microfono.wav" ? "Grabación con el micrófono" : j.nombre) + ` · ${j.duracion_s} s`;
+  $("confianza").textContent = Math.round(j.votos[0].p * 100) + " %";
+  $("tempo").textContent = j.tempo ? Math.round(j.tempo) : "—";
+  $("nfrag").textContent = j.fragmentos.length;
+  $("nfrag-texto").textContent = j.fragmentos.length === 1 ? "fragmento" : "fragmentos";
+
+  const notas = [];
+  if (j.excluida) notas.push("Esta canción está en la base: para que la prueba sea justa, se analizó sin usar sus propios fragmentos.");
+  if (j.votos[0].p < 0.4) notas.push("El resultado es dudoso: ningún género reunió el 40 % de los votos.");
+  if (j.duracion_s < 10) notas.push("El audio dura menos de 10 s; con más duración el resultado es más confiable.");
+  if (j.nivel_dbfs < -40) notas.push("El nivel de la grabación es muy bajo.");
+  $("nota").hidden = !notas.length; $("nota").textContent = notas.join(" ");
+
+  const votos = $("votos"); votos.innerHTML = "";
+  j.votos.forEach((v, i) => {
+    const fila = document.createElement("div"); fila.className = "voto" + (i === 0 ? " primero" : "");
+    fila.innerHTML = `<span></span><div class="barra-voto"><i></i></div><span class="pct"></span>`;
+    fila.children[0].textContent = v.nombre;
+    fila.children[2].textContent = Math.round(v.p * 100) + " %";
+    const barra = fila.querySelector("i"); barra.style.background = COLOR[v.genero] || "#888";
+    votos.appendChild(fila);
+    requestAnimationFrame(() => requestAnimationFrame(() => barra.style.width = Math.max(1.5, v.p * 100) + "%"));
+  });
+
+  const tira = $("tira"), vistos = new Map(); tira.innerHTML = "";
+  j.fragmentos.forEach(f => {
+    const c = document.createElement("i"); c.style.background = COLOR[f.genero] || "#888";
+    const nombre = (j.votos.find(v => v.genero === f.genero) || {}).nombre || f.genero;
+    c.title = `${f.t} s: ${nombre}`; tira.appendChild(c); vistos.set(f.genero, nombre);
+  });
+  $("eje-ini").textContent = j.fragmentos[0].t + " s";
+  $("eje-fin").textContent = (j.fragmentos[j.fragmentos.length - 1].t + 10 > j.duracion_s ? j.duracion_s : j.fragmentos[j.fragmentos.length - 1].t + 10) + " s";
+  const ley = $("leyenda"); ley.innerHTML = "";
+  vistos.forEach((nombre, g) => { const s = document.createElement("span"); s.innerHTML = "<i></i>"; s.firstChild.style.background = COLOR[g] || "#888"; s.append(nombre); ley.appendChild(s); });
+
+  const p = $("patron"); p.innerHTML = "";
+  j.patron.forEach((fila, b) => {
+    const et = document.createElement("div"); et.className = "fila"; et.textContent = BANDA[j.bandas[b]] || j.bandas[b]; p.appendChild(et);
+    fila.forEach(val => { const c = document.createElement("div"); c.className = "celda"; c.style.background = color; c.style.opacity = (0.08 + 0.92 * val).toFixed(2); p.appendChild(c); });
+  });
+  p.appendChild(document.createElement("div"));
+  for (let i = 0; i < 16; i++) { const n = document.createElement("div"); n.className = "num" + (i % 4 === 0 ? " pulso" : ""); n.textContent = i % 4 === 0 ? i / 4 + 1 : "·"; p.appendChild(n); }
+
+  $("resultado").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+</script>
+</body>
+</html>

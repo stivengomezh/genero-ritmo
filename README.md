@@ -46,7 +46,8 @@ audio → mono, 22 050 Hz → fragmentos de 10 s → STFT → flujo espectral en
   fuera (azar: 12 %). Según el valor de k, entre 81 y 86 %.
 - Al clasificar una canción que ya está en la base, se deja por fuera de su propio
   entrenamiento (si no, se reconocería a sí misma y el resultado no diría nada).
-- Clasificación de un archivo o de una grabación con el micrófono.
+- Clasificación de un archivo o de una grabación con el micrófono, desde la terminal o desde
+  una **página web** (`python main.py web`).
 - Generador de ritmos sintéticos, para probar el código sin canciones.
 
 **Cambios desde la Entrega 2:**
@@ -180,7 +181,30 @@ python main.py evaluar           # clasificador k-NN con validación dejando una
 python main.py clasificar data/canciones/cumbia_02.mp3
 python main.py ritmo data/canciones/reggaeton_01.mp3     # análisis rítmico de un archivo
 python main.py grabar            # graba 10 s con el micrófono y predice el género
+python main.py web               # abre la página web (Mini-Shazam) en el navegador
 ```
+
+### Página web (Mini-Shazam)
+
+![Página web](results/pagina_web.jpg)
+
+`python main.py web` prepara la base de canciones y abre `http://127.0.0.1:8000` en el navegador.
+En la página se puede **grabar con el micrófono** (10 a 30 s) o **subir un archivo** de audio
+(también arrastrándolo), y se ve el género, los votos de cada género, el tempo, el género de
+cada fragmento de 10 s y el patrón de compás.
+
+- El análisis lo hace el mismo código del proyecto: la página solo envía el audio a
+  `src/web.py` y dibuja la respuesta. No es una implementación aparte.
+- No necesita instalar nada más: el servidor usa la biblioteca estándar de Python y la página
+  es un solo archivo (`web/index.html`), sin conexión a internet.
+- Solo atiende en `127.0.0.1`, es decir, en el computador donde se ejecuta. Para detenerla:
+  `Ctrl + C` en la terminal. Si el puerto está ocupado: `python main.py web --puerto 8080`.
+- La primera vez tarda varios minutos mientras calcula las características de las canciones
+  (después quedan guardadas). Sin canciones en `data/canciones/` usa los ritmos sintéticos.
+- El micrófono se captura sin cancelación de eco ni reducción de ruido del navegador: esos
+  filtros están pensados para la voz y deforman la música.
+- Si se sube una canción que ya está en la base (mismo nombre de archivo), se analiza sin usar
+  sus propios fragmentos y la página lo avisa.
 
 Sin canciones se puede probar todo con los ritmos sintéticos:
 
@@ -208,8 +232,10 @@ genero-ritmo/
 │   ├── ruido.py            ruido blanco, rosa y filtro de micrófono
 │   ├── sinteticos.py       generador de ritmos de prueba
 │   ├── microfono.py        grabación
+│   ├── web.py              servidor de la página web (biblioteca estándar)
 │   ├── graficas.py         figuras
 │   └── cli.py              comandos y menú
+├── web/                    página web: index.html e imágenes (logo y campus)
 ├── data/                   canciones (no se suben), ritmos sintéticos (se generan)
 ├── results/                figuras y tablas generadas
 ├── docs/                   metodología y documentos de las entregas

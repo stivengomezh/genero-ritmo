@@ -1,7 +1,7 @@
 caracteristicas,cantidad,exactitud_fragmento,exactitud_cancion
-Solo tempo,1,0.347,0.391
-Tempo y subdivisión (autocorrelación),9,0.515,0.656
-"Energía, densidad y regularidad por banda",9,0.356,0.516
-Patrón de compás (posición y |DFT|),33,0.503,0.766
-"Intensidad (dinámica, percusividad, fuerza)",6,0.276,0.375
-Todas las características,57,0.659,0.859
+Solo tempo,1,0.334,0.365
+Tempo y subdivisión (autocorrelación),9,0.520,0.683
+"Energía, densidad y regularidad por banda",9,0.350,0.508
+Patrón de compás (posición y |DFT|),33,0.500,0.762
+"Intensidad (dinámica, percusividad, fuerza)",6,0.270,0.381
+Todas las características,57,0.654,0.841

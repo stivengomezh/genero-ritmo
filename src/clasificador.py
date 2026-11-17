@@ -225,26 +225,31 @@ def evaluar(carpeta=None, k=C.K_VECINOS, graficar=True, mostrar=False):
 
 
 # ============================================================ Clasificar un audio nuevo
-def clasificar_senal(y, carpeta=None, k=C.K_VECINOS, datos=None, excluir=None):
+def clasificar_senal(y, carpeta=None, k=C.K_VECINOS, datos=None, excluir=None, frags=None):
     """Clasifica la señal `y` (ya a SR Hz) con las canciones de la base.
 
     `excluir` es el nombre de una canción (sin extensión) que no se usa para entrenar.
     Así una canción que ya está en la base no se predice a sí misma.
+    `frags` permite pasar los fragmentos ya elegidos (lista de (inicio_s, señal)); por
+    defecto se usan todos los de `y`.
     """
     datos = datos or extraer_conjunto(carpeta)
     keep = np.ones(len(datos["X"]), dtype=bool) if excluir is None else datos["cancion"] != excluir
     modelo = KNN(k).entrenar(datos["X"][keep], datos["genero"][keep], variantes(datos, keep))
-    frags = fragmentar(y)
-    vectores, tempos = [], []
+    frags = frags or fragmentar(y)
+    vectores, tempos, mejor = [], [], None
     for _, f in frags:
         v, a = caracteristicas(f)
         vectores.append(v)
         tempos.append(a["tempo"]["bpm"])
+        if mejor is None or a["tempo"]["claridad"] > mejor["tempo"]["claridad"]:
+            mejor = a                      # el fragmento con el pulso más claro, para mostrar su patrón
     votos = modelo.votos(np.array(vectores))
     genero, prob = votar_cancion(votos)
     return {"genero": genero, "probabilidades": dict(sorted(prob.items(), key=lambda x: -x[1])),
             "por_fragmento": [(ini, v.most_common(1)[0][0]) for (ini, _), v in zip(frags, votos)],
-            "tempo": float(np.median(tempos))}
+            "tempo": float(np.median(tempos)), "patron": mejor["patron"],
+            "claridad": float(mejor["tempo"]["claridad"])}
 
 
 def imprimir_clasificacion(res, nombre=""):

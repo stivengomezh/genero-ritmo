@@ -8,6 +8,7 @@ cli.py - Comandos del sistema (se ejecuta con "python main.py" desde la raíz de
     python main.py evaluar               clasificador k-NN con validación dejando una canción por fuera
     python main.py clasificar ARCHIVO    predice el género de un audio
     python main.py grabar                graba con el micrófono y predice el género
+    python main.py web                   abre la página web (Mini-Shazam) en el navegador
 
 Opciones generales:
     --carpeta RUTA   carpeta de canciones (por defecto data/canciones; si está vacía, data/sinteticos)
@@ -84,6 +85,11 @@ def cmd_grabar(args):
     imprimir_clasificacion(clasificar_senal(y, args.carpeta, k=args.k), "micrófono")
 
 
+def cmd_web(args):
+    from web import servir
+    servir(args.carpeta, puerto=args.puerto, abrir=not args.sin_navegador)
+
+
 # ============================================================ Menú
 def menu():
     ns = lambda **kw: argparse.Namespace(carpeta=None, no_mostrar=False, k=C.K_VECINOS, **kw)  # noqa: E731
@@ -94,6 +100,7 @@ def menu():
         "4": ("Evaluar el clasificador", lambda: cmd_evaluar(ns())),
         "5": ("Clasificar un archivo", lambda: cmd_clasificar(ns(archivo=_pedir_archivo(), inicio=None, duracion=None))),
         "6": ("Clasificar desde el micrófono", lambda: cmd_grabar(ns(segundos=C.SEGUNDOS_GRABACION))),
+        "7": ("Abrir la página web (Mini-Shazam)", lambda: cmd_web(ns(puerto=8000, sin_navegador=False))),
     }
     while True:
         print("\n===== GÉNERO MUSICAL POR RITMO =====")
@@ -157,6 +164,11 @@ def crear_parser():
     s.add_argument("--segundos", type=float, default=C.SEGUNDOS_GRABACION)
     s.add_argument("--k", type=int, default=C.K_VECINOS)
     s.set_defaults(func=cmd_grabar)
+
+    s = sub.add_parser("web", parents=[comun], help="abrir la página web (Mini-Shazam) en el navegador")
+    s.add_argument("--puerto", type=int, default=8000)
+    s.add_argument("--sin-navegador", action="store_true", help="no abrir el navegador automáticamente")
+    s.set_defaults(func=cmd_web)
     return p
 
 
